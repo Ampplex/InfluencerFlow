@@ -1,12 +1,13 @@
 // import React from 'react'
 import './index.css'
 import Auth from '../pages/Auth'
+import Navbar from '../components/Navbar'
 
 function App() {
 
   return (
     <>
-      <h1>InfluencerFlow</h1>
+      <Navbar />
       <Auth />
     </>
   )
