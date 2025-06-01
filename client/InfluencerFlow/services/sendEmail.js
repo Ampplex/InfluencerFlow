@@ -34,3 +34,6 @@ sendEmail(
   "ajaypun1976@gmail.com",
   "This is a custom message sent using nodemailer!"
 );
+
+// export
+module.exports = {sendEmail}

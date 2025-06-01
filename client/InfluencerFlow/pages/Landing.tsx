@@ -38,7 +38,7 @@ function LandingPage() {
       }
     };
 
-    let timeout;
+    let timeout: ReturnType<typeof setTimeout>;
     let typeSpeed = isDeleting ? 50 : 100;
 
     if (!isDeleting && charIndex === phrases[phraseIndex].length) {
