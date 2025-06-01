@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, DollarSign, Globe, MessageSquare, Tag, User, Check, AlertCircle, Loader2 } from 'lucide-react';
 import supabase from '../utils/supabase';
+import { useNavigate } from 'react-router-dom';
 
 // Types
 interface FormData {
@@ -66,6 +67,7 @@ const CreateCampaign = () => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [brand_id, setBrandId] = useState<string>('');
   const [isLoadingBrandId, setIsLoadingBrandId] = useState<boolean>(true); // Track loading state
+  const navigate = useNavigate();
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -205,6 +207,12 @@ const CreateCampaign = () => {
         console.log('✅ Campaign saved successfully!');
         console.log('💾 Saved data:', data);
         setStatus('success');
+        navigate('/match_influencers', {
+          state: {
+            query: formData.campaign_name + ' ' + formData.description,
+            limit: 10, // Default limit for matched influencers
+          },
+        });
         
         // Reset form after successful submission
         setTimeout(() => {
