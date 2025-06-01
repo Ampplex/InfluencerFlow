@@ -54,11 +54,28 @@ interface Contract {
   updated_at: string;
 }
 
+interface OutreachRecord {
+  id: string;
+  campaign_id: number;
+  influencer_id: string;
+  influencer_username: string;
+  influencer_email: string;
+  influencer_followers: number;
+  brand_id: string;
+  email_subject: string;
+  email_body: string;
+  status: 'sent' | 'pending' | 'replied' | 'declined';
+  sent_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [selectedTimeframe, setSelectedTimeframe] = useState('7 days');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [outreachRecords, setOutreachRecords] = useState<OutreachRecord[]>([]);
   const [currentBrand, setCurrentBrand] = useState<Brand | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,10 +114,12 @@ const Dashboard = () => {
         setCurrentBrand(brandData);
         await fetchCampaigns(brandData.brand_id);
         await fetchContracts(brandData.brand_id);
+        await fetchOutreachRecords(brandData.brand_id);
       } else {
         // No brand found, might be a new user
         await fetchCampaigns(userId);
         await fetchContracts(userId);
+        await fetchOutreachRecords(userId);
       }
     } catch (err) {
       console.error('Error fetching brand data:', err);
@@ -145,9 +164,36 @@ const Dashboard = () => {
     } catch (err) {
       console.error('Error fetching contracts:', err);
       // Don't set error here as contracts might not exist yet
+    }
+  };
+
+  // Fetch outreach records
+  const fetchOutreachRecords = async (brandId: string) => {
+    try {
+      const { data: outreachData, error: outreachError } = await supabase
+        .from('outreach')
+        .select('*')
+        .eq('brand_id', brandId)
+        .order('sent_at', { ascending: false });
+
+      if (outreachError) {
+        console.error('Error fetching outreach records:', outreachError);
+        // Don't throw error as outreach table might not exist yet
+        setOutreachRecords([]);
+      } else {
+        setOutreachRecords(outreachData || []);
+      }
+    } catch (err) {
+      console.error('Error fetching outreach records:', err);
+      setOutreachRecords([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Get outreach records for a specific campaign
+  const getCampaignOutreach = (campaignId: number) => {
+    return outreachRecords.filter(record => record.campaign_id === campaignId);
   };
 
   // Handle campaign action based on status
@@ -164,8 +210,15 @@ const Dashboard = () => {
         });
         break;
       case 'active':
-        // View campaign details/analytics (for now, just show alert)
-        alert(`Campaign "${campaign.campaign_name}" is currently active. Analytics coming soon!`);
+        // View campaign details/analytics
+        const campaignOutreach = getCampaignOutreach(campaign.id);
+        if (campaignOutreach.length > 0) {
+          const outreachSummary = `Campaign has ${campaignOutreach.length} outreach activities:\n` +
+            campaignOutreach.map(o => `• ${o.influencer_username} (${o.status})`).join('\n');
+          alert(`Campaign "${campaign.campaign_name}" is active.\n\n${outreachSummary}\n\nFull analytics coming soon!`);
+        } else {
+          alert(`Campaign "${campaign.campaign_name}" is currently active. Analytics coming soon!`);
+        }
         break;
       case 'completed':
         // View campaign report
@@ -183,8 +236,13 @@ const Dashboard = () => {
     const completedCampaigns = campaigns.filter(c => c.status === 'completed').length;
     const draftCampaigns = campaigns.filter(c => c.status === 'draft').length;
     
-    // Calculate total reach from matched_creators
-    const totalReach = campaigns.reduce((total, campaign) => {
+    // Calculate total outreach
+    const totalOutreach = outreachRecords.length;
+    const pendingReplies = outreachRecords.filter(r => r.status === 'sent').length;
+    const repliedOutreach = outreachRecords.filter(r => r.status === 'replied').length;
+    
+    // Calculate total reach from matched_creators and outreach
+    const campaignReach = campaigns.reduce((total, campaign) => {
       if (campaign.matched_creators && Array.isArray(campaign.matched_creators)) {
         return total + campaign.matched_creators.reduce((sum, creator) => {
           return sum + (creator.followers || 0);
@@ -193,11 +251,17 @@ const Dashboard = () => {
       return total;
     }, 0);
 
+    const outreachReach = outreachRecords.reduce((total, record) => {
+      return total + (record.influencer_followers || 0);
+    }, 0);
+
+    const totalReach = Math.max(campaignReach, outreachReach);
+
     // Calculate total budget
     const totalBudget = campaigns.reduce((total, campaign) => total + (campaign.budget || 0), 0);
     
-    // Calculate average engagement (mock calculation since we don't have actual engagement data)
-    const avgEngagement = totalReach > 0 ? ((totalReach * 0.08) / totalReach * 100).toFixed(1) : '0.0';
+    // Calculate response rate
+    const responseRate = totalOutreach > 0 ? ((repliedOutreach / totalOutreach) * 100).toFixed(1) : '0.0';
 
     // Calculate ROI (simplified calculation)
     const estimatedRevenue = totalBudget * 1.5; // Assuming 50% ROI
@@ -209,9 +273,12 @@ const Dashboard = () => {
       completedCampaigns,
       draftCampaigns,
       totalReach: formatNumber(totalReach),
-      engagementRate: `${avgEngagement}%`,
+      responseRate: `${responseRate}%`,
       roi: `+${roi}%`,
       totalBudget: formatCurrency(totalBudget),
+      totalOutreach,
+      pendingReplies,
+      repliedOutreach,
       pendingCollabs: contracts.filter(c => c.status === 'pending').length
     };
   };
@@ -262,6 +329,17 @@ const Dashboard = () => {
     }
   };
 
+  // Get outreach status color
+  const getOutreachStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'sent': return 'bg-blue-100 text-blue-800';
+      case 'replied': return 'bg-green-100 text-green-800';
+      case 'declined': return 'bg-red-100 text-red-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   // Get action button text and style based on status
   const getActionButton = (status: string) => {
     switch (status.toLowerCase()) {
@@ -273,7 +351,7 @@ const Dashboard = () => {
         };
       case 'active':
         return {
-          text: 'View Analytics',
+          text: 'View Details',
           icon: '📊',
           color: 'bg-green-600 hover:bg-green-700 text-white'
         };
@@ -304,9 +382,21 @@ const Dashboard = () => {
     return `${days} days left`;
   };
 
-  // Recent activity based on real data
+  // Recent activity based on real data including outreach
   const generateRecentActivity = (): Activity[] => {
     const activities: Activity[] = [];
+    
+    // Add outreach activities (most recent first)
+    outreachRecords.slice(0, 4).forEach(outreach => {
+      activities.push({
+        id: `outreach-${outreach.id}`,
+        type: 'outreach_sent',
+        message: `Outreach sent to ${outreach.influencer_username}`,
+        time: new Date(outreach.sent_at).toLocaleDateString(),
+        icon: outreach.status === 'replied' ? '💬' : outreach.status === 'declined' ? '❌' : '📧',
+        details: `${formatNumber(outreach.influencer_followers)} followers • ${outreach.status}`
+      });
+    });
     
     // Add campaign activities
     campaigns.slice(0, 3).forEach(campaign => {
@@ -332,7 +422,10 @@ const Dashboard = () => {
       });
     });
 
-    return activities.slice(0, 4);
+    // Sort by date and return top 6
+    return activities
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+      .slice(0, 6);
   };
 
   const stats = calculateStats();
@@ -434,7 +527,7 @@ const Dashboard = () => {
               value: stats.activeCampaigns, 
               icon: '🚀', 
               color: 'from-blue-500 to-blue-600',
-              subtitle: `${stats.pendingCollabs} pending collaborations`
+              subtitle: `${stats.totalOutreach} total outreach sent`
             },
             { 
               title: 'Total Reach', 
@@ -444,18 +537,18 @@ const Dashboard = () => {
               subtitle: 'Across all campaigns'
             },
             { 
+              title: 'Response Rate', 
+              value: stats.responseRate, 
+              icon: '💬', 
+              color: 'from-green-500 to-green-600',
+              subtitle: `${stats.repliedOutreach} of ${stats.totalOutreach} replied`
+            },
+            { 
               title: 'Campaign Budget', 
               value: stats.totalBudget, 
               icon: '💰', 
-              color: 'from-green-500 to-green-600',
-              subtitle: 'Total allocated budget'
-            },
-            { 
-              title: 'Campaign ROI', 
-              value: stats.roi, 
-              icon: '📈', 
               color: 'from-orange-500 to-orange-600',
-              subtitle: 'Estimated return'
+              subtitle: 'Total allocated budget'
             }
           ].map((stat, index) => (
             <motion.div
@@ -508,10 +601,11 @@ const Dashboard = () => {
                   {campaigns.map((campaign) => {
                     const progress = calculateCampaignProgress(campaign);
                     const timeRemaining = getTimeRemaining(campaign.end_date);
-                    const influencerCount = campaign.matched_creators ? campaign.matched_creators.length : 0;
+                    const campaignOutreach = getCampaignOutreach(campaign.id);
+                    const influencerCount = campaign.matched_creators ? campaign.matched_creators.length : campaignOutreach.length;
                     const totalReach = campaign.matched_creators 
                       ? campaign.matched_creators.reduce((sum, creator) => sum + (creator.followers || 0), 0)
-                      : 0;
+                      : campaignOutreach.reduce((sum, record) => sum + (record.influencer_followers || 0), 0);
                     const actionButton = getActionButton(campaign.status);
 
                     return (
@@ -531,8 +625,8 @@ const Dashboard = () => {
                         
                         <div className="grid grid-cols-4 gap-4 mb-4">
                           <div>
-                            <p className="text-xs text-gray-500">Influencers</p>
-                            <p className="font-semibold">{influencerCount}</p>
+                            <p className="text-xs text-gray-500">Outreach</p>
+                            <p className="font-semibold">{campaignOutreach.length}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Reach</p>
@@ -547,6 +641,28 @@ const Dashboard = () => {
                             <p className="font-semibold">{formatCurrency(campaign.budget)}</p>
                           </div>
                         </div>
+
+                        {/* Outreach Status Summary */}
+                        {campaignOutreach.length > 0 && (
+                          <div className="mb-4">
+                            <p className="text-xs text-gray-500 mb-2">Outreach Status:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {campaignOutreach.slice(0, 3).map((outreach) => (
+                                <span
+                                  key={outreach.id}
+                                  className={`px-2 py-1 rounded-full text-xs font-medium ${getOutreachStatusColor(outreach.status)}`}
+                                >
+                                  {outreach.influencer_username} • {outreach.status}
+                                </span>
+                              ))}
+                              {campaignOutreach.length > 3 && (
+                                <span className="px-2 py-1 text-xs text-gray-500">
+                                  +{campaignOutreach.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         
                         {campaign.status !== 'draft' && (
                           <>
@@ -651,35 +767,24 @@ const Dashboard = () => {
                     <span className="font-bold text-lg text-green-600">{stats.activeCampaigns}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Completed</span>
-                    <span className="font-bold text-lg text-blue-600">{stats.completedCampaigns}</span>
+                    <span className="text-gray-600">Total Outreach</span>
+                    <span className="font-bold text-lg text-blue-600">{stats.totalOutreach}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Draft</span>
-                    <span className="font-bold text-lg text-orange-600">{stats.draftCampaigns}</span>
+                    <span className="text-gray-600">Pending Replies</span>
+                    <span className="font-bold text-lg text-orange-600">{stats.pendingReplies}</span>
                   </div>
                 </div>
 
-                {stats.draftCampaigns > 0 && (
-                  <div className="mt-6 p-4 bg-orange-50 rounded-xl border border-orange-200">
+                {stats.pendingReplies > 0 && (
+                  <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-orange-600">⚠️</span>
-                      <span className="text-sm font-semibold text-orange-800">Action Required</span>
+                      <span className="text-blue-600">📧</span>
+                      <span className="text-sm font-semibold text-blue-800">Outreach Update</span>
                     </div>
-                    <p className="text-sm text-orange-700 mb-3">
-                      You have {stats.draftCampaigns} draft campaign{stats.draftCampaigns > 1 ? 's' : ''} waiting to be completed.
+                    <p className="text-sm text-blue-700 mb-3">
+                      You have {stats.pendingReplies} outreach emails awaiting responses.
                     </p>
-                    <button 
-                      onClick={() => {
-                        const draftCampaign = campaigns.find(c => c.status === 'draft');
-                        if (draftCampaign) {
-                          handleCampaignAction(draftCampaign);
-                        }
-                      }}
-                      className="w-full bg-orange-600 text-white py-2 rounded-lg font-medium hover:bg-orange-700 transition-colors text-sm"
-                    >
-                      Continue Setup
-                    </button>
                   </div>
                 )}
 
