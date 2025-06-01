@@ -84,13 +84,28 @@ const Dashboard = () => {
   useEffect(() => {
     const getCurrentUser = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
+        console.log('Getting current user session...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          setError('Failed to get user session');
+          setLoading(false);
+          return;
+        }
+        
+        if (session?.user) {
+          console.log('User found:', session.user.id);
           await fetchBrandData(session.user.id);
+        } else {
+          console.log('No user session found');
+          setError('Please log in to view dashboard');
+          setLoading(false);
         }
       } catch (err) {
         console.error('Error getting current user:', err);
         setError('Failed to load user data');
+        setLoading(false);
       }
     };
 
@@ -100,36 +115,42 @@ const Dashboard = () => {
   // Fetch brand data
   const fetchBrandData = async (userId: string) => {
     try {
+      console.log('Fetching brand data for user:', userId);
+      
       const { data: brandData, error: brandError } = await supabase
         .from('brands')
         .select('*')
         .eq('brand_id', userId)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to handle no results
 
       if (brandError && brandError.code !== 'PGRST116') { // PGRST116 is "not found"
-        throw brandError;
+        console.error('Brand fetch error:', brandError);
+        // Don't throw error, continue with userId as brandId
       }
 
+      const brandId = brandData?.brand_id || userId;
+      console.log('Using brand ID:', brandId);
+      
       if (brandData) {
         setCurrentBrand(brandData);
-        await fetchCampaigns(brandData.brand_id);
-        await fetchContracts(brandData.brand_id);
-        await fetchOutreachRecords(brandData.brand_id);
-      } else {
-        // No brand found, might be a new user
-        await fetchCampaigns(userId);
-        await fetchContracts(userId);
-        await fetchOutreachRecords(userId);
       }
+      
+      await fetchCampaigns(brandId);
+      await fetchContracts(brandId);
+      await fetchOutreachRecords(brandId);
+      
     } catch (err) {
       console.error('Error fetching brand data:', err);
-      setError('Failed to load brand data');
+      // Don't set error, continue with empty data
+      setLoading(false);
     }
   };
 
   // Fetch campaigns
   const fetchCampaigns = async (brandId: string) => {
     try {
+      console.log('Fetching campaigns for brand:', brandId);
+      
       const { data: campaignData, error: campaignError } = await supabase
         .from('campaign')
         .select('*')
@@ -137,19 +158,24 @@ const Dashboard = () => {
         .order('created_at', { ascending: false });
 
       if (campaignError) {
-        throw campaignError;
+        console.error('Campaign fetch error:', campaignError);
+        setCampaigns([]);
+        return;
       }
 
       setCampaigns(campaignData || []);
+      console.log('Campaigns loaded:', campaignData?.length || 0);
     } catch (err) {
       console.error('Error fetching campaigns:', err);
-      setError('Failed to load campaigns');
+      setCampaigns([]);
     }
   };
 
   // Fetch contracts
   const fetchContracts = async (brandId: string) => {
     try {
+      console.log('Fetching contracts for brand:', brandId);
+      
       const { data: contractData, error: contractError } = await supabase
         .from('contracts')
         .select('*')
@@ -157,19 +183,24 @@ const Dashboard = () => {
         .order('created_at', { ascending: false });
 
       if (contractError) {
-        throw contractError;
+        console.error('Contract fetch error:', contractError);
+        setContracts([]);
+        return;
       }
 
       setContracts(contractData || []);
+      console.log('Contracts loaded:', contractData?.length || 0);
     } catch (err) {
       console.error('Error fetching contracts:', err);
-      // Don't set error here as contracts might not exist yet
+      setContracts([]);
     }
   };
 
   // Fetch outreach records
   const fetchOutreachRecords = async (brandId: string) => {
     try {
+      console.log('Fetching outreach records for brand:', brandId);
+      
       const { data: outreachData, error: outreachError } = await supabase
         .from('outreach')
         .select('*')
@@ -177,12 +208,13 @@ const Dashboard = () => {
         .order('sent_at', { ascending: false });
 
       if (outreachError) {
-        console.error('Error fetching outreach records:', outreachError);
-        // Don't throw error as outreach table might not exist yet
+        console.error('Outreach fetch error:', outreachError);
         setOutreachRecords([]);
-      } else {
-        setOutreachRecords(outreachData || []);
+        return;
       }
+
+      setOutreachRecords(outreachData || []);
+      console.log('Outreach records loaded:', outreachData?.length || 0);
     } catch (err) {
       console.error('Error fetching outreach records:', err);
       setOutreachRecords([]);
