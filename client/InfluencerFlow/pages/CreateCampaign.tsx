@@ -16,7 +16,7 @@ const supabase = {
       }
     })
   },
-  from: (table: string) => ({
+  from: (_table: string) => ({
     insert: async (data: any) => {
       console.log('Inserting data:', data);
       // Simulate success/error
@@ -241,7 +241,7 @@ const CreateCampaign = () => {
         report_id: crypto.randomUUID(),
       };
       
-      const { error, data } = await supabase.from('campaign').insert([campaignData]);
+      const { error } = await supabase.from('campaign').insert([campaignData]);
 
       if (error) {
         console.error('Database error:', error.message);
