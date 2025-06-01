@@ -1,31 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-
-// Mock supabase - replace with your actual import
-const supabase = {
-  auth: {
-    getSession: async () => ({
-      data: {
-        session: {
-          user: {
-            id: 'user123',
-            user_metadata: { id: 'brand123' }
-          }
-        }
-      }
-    })
-  },
-  from: (_table: string) => ({
-    insert: async (data: any) => {
-      console.log('Inserting data:', data);
-      // Simulate success/error
-      return Math.random() > 0.3 
-        ? { data: data, error: null }
-        : { data: null, error: { message: 'Database error occurred' } };
-    }
-  })
-};
+import supabase from '../utils/supabase';
 
 // Types
 interface FormData {
@@ -39,9 +15,6 @@ interface FormData {
   brand_id: string;
   brand_name: string;
   voice_enabled: boolean;
-  campaign_type: string;
-  target_age_group: string;
-  content_type: string;
 }
 
 interface FormErrors {
@@ -63,15 +36,13 @@ const CreateCampaign = () => {
     brand_id: '',
     brand_name: '',
     voice_enabled: false,
-    campaign_type: '',
-    target_age_group: '',
-    content_type: '',
   });
 
   const [status, setStatus] = useState<Status>('idle');
   const [errors, setErrors] = useState<FormErrors>({});
   const [brand_id, setBrandId] = useState<string>('');
   const [isLoadingBrandId, setIsLoadingBrandId] = useState<boolean>(true);
+  const [createdCampaignId, setCreatedCampaignId] = useState<number | null>(null);
 
   const platformOptions = [
     { id: 'instagram', name: 'Instagram', icon: '📷' },
@@ -80,18 +51,6 @@ const CreateCampaign = () => {
     { id: 'twitter', name: 'Twitter', icon: '🐦' },
     { id: 'linkedin', name: 'LinkedIn', icon: '💼' },
     { id: 'facebook', name: 'Facebook', icon: '👥' }
-  ];
-
-  const campaignTypes = [
-    'Product Launch', 'Brand Awareness', 'Lead Generation', 'Sales Conversion', 'Event Promotion'
-  ];
-
-  const ageGroups = [
-    '13-17', '18-24', '25-34', '35-44', '45-54', '55+'
-  ];
-
-  const contentTypes = [
-    'Photos', 'Videos', 'Stories', 'Reels', 'Live Streams', 'Blog Posts'
   ];
 
   // Calculate estimated metrics
@@ -185,17 +144,28 @@ const CreateCampaign = () => {
   const getProtectedData = async () => {
     try {
       setIsLoadingBrandId(true);
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        console.error('No session found');
-        setIsLoadingBrandId(false);
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        setErrors({ brand_id: 'Authentication error. Please log in again.' });
         return;
       }
-      const fetchedBrandId = data.session.user.user_metadata.id || data.session.user.id || '';
-      setBrandId(fetchedBrandId);
-      console.log("Brand ID fetched:", fetchedBrandId);
+      
+      if (!data.session) {
+        console.error('No session found');
+        setErrors({ brand_id: 'No active session. Please log in again.' });
+        return;
+      }
+      
+      // Use the user's ID as brand_id
+      const userId = data.session.user.id;
+      setBrandId(userId);
+      console.log("Using user ID as brand ID:", userId);
+      
     } catch (error) {
       console.error('Error fetching brand ID:', error);
+      setErrors({ brand_id: 'Error loading account information. Please refresh and try again.' });
     } finally {
       setIsLoadingBrandId(false);
     }
@@ -232,37 +202,40 @@ const CreateCampaign = () => {
         brand_id: brand_id,
         brand_name: formData.brand_name,
         voice_enabled: formData.voice_enabled,
-        campaign_type: formData.campaign_type,
-        target_age_group: formData.target_age_group,
-        content_type: formData.content_type,
         status: 'draft',
-        created_at: new Date().toISOString(),
         matched_creators: [],
         report_id: crypto.randomUUID(),
       };
       
-      const { error } = await supabase.from('campaign').insert([campaignData]);
+      const { error, data } = await supabase
+        .from('campaign')
+        .insert([campaignData])
+        .select();
 
       if (error) {
         console.error('Database error:', error.message);
         setStatus('error');
+        setErrors({ submit: error.message });
       } else {
-        console.log('Campaign saved successfully!');
+        console.log('Campaign saved successfully!', data);
         setStatus('success');
+        setCreatedCampaignId(data[0].id);
         
-        // Redirect after success
+        // Redirect after success - FIXED PATH
         setTimeout(() => {
           navigate('/match_influencers', {
             state: {
+              campaignId: data[0].id,
               query: formData.campaign_name + ' ' + formData.description,
               limit: 10,
             },
           });
         }, 2000);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Unexpected error:', err);
       setStatus('error');
+      setErrors({ submit: err.message || 'An unexpected error occurred' });
     }
   };
 
@@ -313,7 +286,7 @@ const CreateCampaign = () => {
                   <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-medium">Campaign created successfully! Redirecting...</span>
+                      <span className="text-sm font-medium">Campaign created successfully! Redirecting to find influencers...</span>
                     </div>
                   </div>
                 </motion.div>
@@ -329,23 +302,33 @@ const CreateCampaign = () => {
                   <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                      <span className="text-sm font-medium">Failed to create campaign. Please try again.</span>
+                      <span className="text-sm font-medium">
+                        {errors.submit || 'Failed to create campaign. Please try again.'}
+                      </span>
                     </div>
                   </div>
                 </motion.div>
               )}
 
-              {isLoadingBrandId && (
+              {(isLoadingBrandId || errors.brand_id) && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   className="mb-6"
                 >
-                  <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-xl p-4">
+                  <div className={`border rounded-xl p-4 ${
+                    errors.brand_id 
+                      ? 'bg-red-50 border-red-200 text-red-800' 
+                      : 'bg-blue-50 border-blue-200 text-blue-800'
+                  }`}>
                     <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-medium">Loading account information...</span>
+                      <div className={`w-2 h-2 rounded-full ${
+                        errors.brand_id ? 'bg-red-500' : 'bg-blue-500 animate-pulse'
+                      }`}></div>
+                      <span className="text-sm font-medium">
+                        {errors.brand_id || 'Loading account information...'}
+                      </span>
                     </div>
                   </div>
                 </motion.div>
@@ -373,42 +356,23 @@ const CreateCampaign = () => {
                 )}
               </div>
 
-              {/* Brand Name & Campaign Type */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Brand Name *
-                  </label>
-                  <input
-                    name="brand_name"
-                    placeholder="Your brand name"
-                    value={formData.brand_name}
-                    onChange={handleChange}
-                    className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white text-gray-900 font-medium ${
-                      errors.brand_name ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  />
-                  {errors.brand_name && (
-                    <p className="text-sm text-red-600 mt-1">{errors.brand_name}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Campaign Type
-                  </label>
-                  <select
-                    name="campaign_type"
-                    value={formData.campaign_type}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white hover:border-gray-300"
-                  >
-                    <option value="">Select type</option>
-                    {campaignTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* Brand Name */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Brand Name *
+                </label>
+                <input
+                  name="brand_name"
+                  placeholder="Your brand name"
+                  value={formData.brand_name}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white text-gray-900 font-medium ${
+                    errors.brand_name ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                />
+                {errors.brand_name && (
+                  <p className="text-sm text-red-600 mt-1">{errors.brand_name}</p>
+                )}
               </div>
 
               {/* Description */}
@@ -457,48 +421,29 @@ const CreateCampaign = () => {
                 )}
               </div>
 
-              {/* Budget and Target Age */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Budget (USD) *
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-                    <input
-                      name="budget"
-                      type="number"
-                      placeholder="10000"
-                      value={formData.budget}
-                      onChange={handleChange}
-                      min="0"
-                      step="100"
-                      className={`w-full pl-8 pr-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white text-gray-900 font-medium ${
-                        errors.budget ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    />
-                  </div>
-                  {errors.budget && (
-                    <p className="text-sm text-red-600 mt-1">{errors.budget}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Target Age Group
-                  </label>
-                  <select
-                    name="target_age_group"
-                    value={formData.target_age_group}
+              {/* Budget */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Budget (USD) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                  <input
+                    name="budget"
+                    type="number"
+                    placeholder="10000"
+                    value={formData.budget}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white hover:border-gray-300"
-                  >
-                    <option value="">Select age group</option>
-                    {ageGroups.map(age => (
-                      <option key={age} value={age}>{age}</option>
-                    ))}
-                  </select>
+                    min="0"
+                    step="100"
+                    className={`w-full pl-8 pr-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white text-gray-900 font-medium ${
+                      errors.budget ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  />
                 </div>
+                {errors.budget && (
+                  <p className="text-sm text-red-600 mt-1">{errors.budget}</p>
+                )}
               </div>
 
               {/* Dates Row */}
@@ -542,36 +487,44 @@ const CreateCampaign = () => {
                 </div>
               </div>
 
-              {/* Content Type & Languages */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Content Type
-                  </label>
-                  <select
-                    name="content_type"
-                    value={formData.content_type}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white hover:border-gray-300"
-                  >
-                    <option value="">Select content type</option>
-                    {contentTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* Languages */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Preferred Languages
+                </label>
+                <input
+                  name="preferred_languages"
+                  placeholder="English, Spanish, French"
+                  value={formData.preferred_languages}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white hover:border-gray-300"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Languages
+              {/* AI Voice Toggle */}
+              <div className="bg-blue-50 rounded-2xl p-4 border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-900">AI Voice Interactions</h4>
+                      <p className="text-sm text-gray-600">Enable voice-powered campaign features</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="voice_enabled"
+                      checked={formData.voice_enabled}
+                      onChange={handleChange}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-blue-600 peer-checked:to-purple-600"></div>
                   </label>
-                  <input
-                    name="preferred_languages"
-                    placeholder="English, Spanish, French"
-                    value={formData.preferred_languages}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white hover:border-gray-300"
-                  />
                 </div>
               </div>
             </div>
@@ -605,10 +558,17 @@ const CreateCampaign = () => {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  <span>Create Campaign</span>
+                  <span>Create Campaign & Find Influencers</span>
                 </>
               )}
             </motion.button>
+
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="w-full mt-4 text-gray-600 hover:text-gray-800 font-medium py-2 transition-colors"
+            >
+              Back to Dashboard
+            </button>
           </div>
 
           {/* Right Side - Practical Summary & Insights (2/5) */}
@@ -647,12 +607,6 @@ const CreateCampaign = () => {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-white/70">Type:</span>
-                      <span className="font-medium">
-                        {formData.campaign_type || 'Not selected'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
                       <span className="text-white/70">Duration:</span>
                       <span className="font-medium">
                         {estimates.duration ? `${estimates.duration} days` : 'Not set'}
@@ -674,7 +628,7 @@ const CreateCampaign = () => {
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div>
                       <div className="text-2xl font-bold text-blue-300">
-                        {formData.budget ? `${parseFloat(formData.budget).toLocaleString()}` : '$0'}
+                        {formData.budget ? `$${parseFloat(formData.budget).toLocaleString()}` : '$0'}
                       </div>
                       <div className="text-xs text-white/70">Total Budget</div>
                     </div>
@@ -713,7 +667,7 @@ const CreateCampaign = () => {
                     <div className="flex justify-between items-center">
                       <span className="text-white/70 text-sm">Cost per Engagement:</span>
                       <span className="font-bold text-lg text-blue-300">
-                        {estimates.engagement > 0 ? `${(parseFloat(formData.budget || '0') / estimates.engagement).toFixed(2)}` : '$0'}
+                        {estimates.engagement > 0 ? `$${(parseFloat(formData.budget || '0') / estimates.engagement).toFixed(2)}` : '$0'}
                       </span>
                     </div>
                   </div>
