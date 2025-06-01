@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -160,8 +161,6 @@ function MatchedInfluencers() {
       
       const selectedData = influencers.filter(inf => selectedInfluencers.has(inf.id));
       console.log("Selected Influencers for Outreach:", selectedData);
-      
-      alert(`✉️ Outreach emails sent successfully to ${selectedInfluencers.size} influencer(s)!\n\nDemo mode: In a real app, this would send personalized emails to each selected influencer and update the campaign status to "active".`);
       setSelectedInfluencers(new Set());
       
       // Navigate back to dashboard after successful outreach
