@@ -84,26 +84,6 @@ function Navbar({ hideOnAuth = false }: NavbarProps) {
     }
   };
 
-  // Alternative method if you need to handle navigation differently
-  const _handleLoginAlternative = async () => {
-    try {
-      const { data: _data, error } = await supabase.auth.signInWithOAuth({ 
-        provider: 'google'
-      });
-      
-      if (error) {
-        console.error('OAuth error:', error);
-        return;
-      }
-
-      // Don't try to get session immediately - let the auth state change handler do it
-      // The navigation will happen in the onAuthStateChange callback above
-      
-    } catch (error) {
-      console.error('Error signing in:', error);
-    }
-  };
-
   const handleSignOut = async () => {
     try {
       const { error } = await supabase.auth.signOut();
