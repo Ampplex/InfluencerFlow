@@ -105,17 +105,15 @@ function MatchedInfluencers() {
         }
       
       // Make actual API call to your outreach endpoint
-      const response = await fetch('http://localhost:8000/outreach', {
+      const response = await fetch('http://localhost:8000/influencers/outreachEmailGenerator', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          influencers: selectedData,
-          campaign: {
-            query: query,
-            timestamp: new Date().toISOString()
-          }
+          influencers_data: selectedData,
+          brand_name: "Your Brand Name", // Replace with actual brand name
+          brand_description: "Your Brand Description", // Replace with actual brand description
         })
       });
       
