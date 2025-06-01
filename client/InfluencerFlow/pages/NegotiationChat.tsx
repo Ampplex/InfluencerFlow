@@ -60,7 +60,7 @@ const NegotiationChat: React.FC = () => {
   const API_BASE_URL = 'http://localhost:8000';
 
   const [outreachStatus, setOutreachStatus] = useState<OutreachStatus>('sent');
-  const [influencerId, setInfluencerId] = useState<string>('test_influencer'); // TODO: Replace with actual influencer id logic
+  const [influencerId, _setInfluencerId] = useState<string>('test_influencer'); // TODO: Replace with actual influencer id logic
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

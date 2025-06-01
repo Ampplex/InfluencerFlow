@@ -365,7 +365,7 @@ const ContractForm = ({ onContractCreated }: { onContractCreated: () => void }) 
 };
 
 // Signature Upload Component
-const SignatureUpload = ({ contractId, onSign }: { contractId: string; onSign: (file: File) => void }) => {
+const SignatureUpload = ({ contractId: _contractId, onSign }: { contractId: string; onSign: (file: File) => void }) => {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

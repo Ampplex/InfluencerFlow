@@ -629,7 +629,6 @@ const Dashboard = () => {
                     const progress = calculateCampaignProgress(campaign);
                     const timeRemaining = getTimeRemaining(campaign.end_date);
                     const campaignOutreach = getCampaignOutreach(campaign.id);
-                    const influencerCount = campaign.matched_creators ? campaign.matched_creators.length : campaignOutreach.length;
                     const totalReach = campaign.matched_creators 
                       ? campaign.matched_creators.reduce((sum, creator) => sum + (creator.followers || 0), 0)
                       : campaignOutreach.reduce((sum, record) => sum + (record.influencer_followers || 0), 0);

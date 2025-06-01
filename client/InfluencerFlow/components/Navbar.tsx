@@ -85,9 +85,9 @@ function Navbar({ hideOnAuth = false }: NavbarProps) {
   };
 
   // Alternative method if you need to handle navigation differently
-  const handleLoginAlternative = async () => {
+  const _handleLoginAlternative = async () => {
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({ 
+      const { data: _data, error } = await supabase.auth.signInWithOAuth({ 
         provider: 'google'
       });
       
