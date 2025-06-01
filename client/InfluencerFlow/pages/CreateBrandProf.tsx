@@ -5,7 +5,7 @@ import supabase from '../utils/supabase';
 function CreateBrandProf() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { id, email, full_name } = location.state || {};
+  const { id } = location.state || {};
 
   const [brandName, setBrandName] = useState('');
   const [brandDescription, setBrandDescription] = useState('');

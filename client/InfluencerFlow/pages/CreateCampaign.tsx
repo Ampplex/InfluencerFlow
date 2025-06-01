@@ -42,7 +42,6 @@ const CreateCampaign = () => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [brand_id, setBrandId] = useState<string>('');
   const [isLoadingBrandId, setIsLoadingBrandId] = useState<boolean>(true);
-  const [createdCampaignId, setCreatedCampaignId] = useState<number | null>(null);
 
   const platformOptions = [
     { id: 'instagram', name: 'Instagram', icon: '📷' },
@@ -219,7 +218,6 @@ const CreateCampaign = () => {
       } else {
         console.log('Campaign saved successfully!', data);
         setStatus('success');
-        setCreatedCampaignId(data[0].id);
         
         // Redirect after success - FIXED PATH
         setTimeout(() => {
