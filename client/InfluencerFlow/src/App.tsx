@@ -6,6 +6,7 @@ import Navbar from '../components/Navbar';
 import Dashboard from '../pages/Dashboard';
 import CreateCampaign from '../pages/CreateCampaign';
 import MatchedInfluencers from '../pages/MatchedInfluencers';
+import CreateBrandProf from '../pages/CreateBrandProf';
 import supabase from '../utils/supabase';
 
 // Protected Route Component

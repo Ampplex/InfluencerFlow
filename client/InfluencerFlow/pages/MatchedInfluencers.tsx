@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -104,7 +105,9 @@ function MatchedInfluencers() {
         if (selectedData.length === 0) {
             alert("No influencers selected for outreach.");
         }
-      
+      const brand_name = localStorage.getItem('brand_name') || "Your Brand Name";
+      const brand_description = localStorage.getItem('brand_description') || "Your Brand Description";
+      console.log(`Brand Name: ${brand_name} and Brand Description: ${brand_description}`);
       // Make actual API call to your outreach endpoint
       const response = await fetch('http://localhost:8000/influencers/outreachEmailGenerator', {
         method: 'POST',
@@ -113,8 +116,8 @@ function MatchedInfluencers() {
         },
         body: JSON.stringify({
           influencers_data: selectedData,
-          brand_name: "Your Brand Name", // Replace with actual brand name
-          brand_description: "Your Brand Description", // Replace with actual brand description
+          brand_name: brand_name, // Replace with actual brand name
+          brand_description: brand_description, // Replace with actual brand description
         })
       });
       
@@ -123,8 +126,21 @@ function MatchedInfluencers() {
       }
       
       const result = await response.json();
+      // Send emails to each
+      /*
+      response format list of: 
+              {
+            "emails": [
+                {
+                    "subject": "FashionDekho x makeuptutorialsx0x - Potential Partnership",
+                    "body": "Hey makeuptutorialsx0x,\n\nWe at FashionDekho love your content on Beauty & Fashion and your insightful product reviews! \n\nWe're building a platform to connect top-tier influencers like yourself with amazing brands and vendors.\n\nWould you be open to exploring a potential partnership?\n\nBest,\nFashionDekho Team"
+                }
+            ]
+        }
+      */
+  
       console.log("Outreach result:", result);
-      
+
       alert(`Outreach initiated successfully for ${selectedInfluencers.size} influencer(s)!`);
       setSelectedInfluencers(new Set());
     } catch (error) {

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import supabase from '../utils/supabase';
@@ -8,12 +9,12 @@ interface NavbarProps {
 }
 
 function Navbar({ hideOnAuth = false }: NavbarProps) {
-  const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const navigate = useNavigate();
 
   const navItems = [
     { name: 'Dashboard', href: '/dashboard' },
@@ -22,7 +23,8 @@ function Navbar({ hideOnAuth = false }: NavbarProps) {
     { name: 'Analytics', href: '/analytics' }
   ];
 
-  // Check authentication status
+
+  // Check authentication status on component mount
   useEffect(() => {
     checkAuthStatus();
     
@@ -31,6 +33,15 @@ function Navbar({ hideOnAuth = false }: NavbarProps) {
       if (event === 'SIGNED_IN' && session) {
         setIsLoggedIn(true);
         setUserData(session.user.user_metadata);
+        
+        // Navigate after successful sign in
+        // navigate('/create-brand-profile', {
+        //   state: {
+        //     id: session.user.id,
+        //     email: session.user.email,
+        //     full_name: session.user.user_metadata.full_name || session.user.user_metadata.username,
+        //   }
+        // });
       } else if (event === 'SIGNED_OUT') {
         setIsLoggedIn(false);
         setUserData(null);
@@ -39,7 +50,7 @@ function Navbar({ hideOnAuth = false }: NavbarProps) {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const checkAuthStatus = async () => {
     try {
@@ -62,7 +73,33 @@ function Navbar({ hideOnAuth = false }: NavbarProps) {
 
   const handleLogin = async () => {
     try {
-      await supabase.auth.signInWithOAuth({ provider: 'google' });
+      // Method 1: Simple OAuth redirect (recommended)
+      await supabase.auth.signInWithOAuth({ 
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/create-brand-profile`
+        }
+      });
+    } catch (error) {
+      console.error('Error signing in:', error);
+    }
+  };
+
+  // Alternative method if you need to handle navigation differently
+  const handleLoginAlternative = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({ 
+        provider: 'google'
+      });
+      
+      if (error) {
+        console.error('OAuth error:', error);
+        return;
+      }
+
+      // Don't try to get session immediately - let the auth state change handler do it
+      // The navigation will happen in the onAuthStateChange callback above
+      
     } catch (error) {
       console.error('Error signing in:', error);
     }
