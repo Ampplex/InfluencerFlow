@@ -4,10 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import supabase from '../utils/supabase';
 
 interface AuthProps {
-  onBack?: () => void;
 }
 
-const InfluencerFlowAuth: React.FC<AuthProps> = ({ onBack }) => {
+const InfluencerFlowAuth: React.FC<AuthProps> = () => {
   const navigate = useNavigate();
   const [message, setMessage] = useState<string>('');
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
