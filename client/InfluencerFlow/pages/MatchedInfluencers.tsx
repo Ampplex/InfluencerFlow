@@ -1,6 +1,7 @@
 import React from "react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import supabase from '../utils/supabase';
 
 // Define the structure of an influencer object
 interface Influencer {
@@ -12,73 +13,28 @@ interface Influencer {
   link: string;
 }
 
-// Mock data for demo purposes
-const mockInfluencers: Influencer[] = [
-  {
-    id: "1",
-    username: "inulute",
-    email: "rishabh@inulute.com",
-    bio: "Tech enthusiast sharing honest reviews of gadgets, apps, and digital tools. Helping people make informed tech decisions.",
-    followers: 245000,
-    link: "https://instagram.com/inulute"
-  },
-  {
-    id: "2", 
-    username: "FitnessGuru_Sarah",
-    email: "sarah@fitlife.com",
-    bio: "Certified personal trainer and nutritionist. Sharing workout routines, healthy recipes, and wellness tips for a balanced lifestyle.",
-    followers: 189000,
-    link: "https://instagram.com/fitnessguru_sarah"
-  },
-  {
-    id: "3",
-    username: "TravelWithMike",
-    email: "mike@wanderlust.com", 
-    bio: "Digital nomad exploring the world one city at a time. Budget travel tips, hidden gems, and cultural experiences.",
-    followers: 156000,
-    link: "https://instagram.com/travelwithmike"
-  },
-  {
-    id: "4",
-    username: "FoodieEmma",
-    email: "emma@tastytreats.com",
-    bio: "Food blogger and recipe creator. Sharing delicious homemade meals, restaurant reviews, and cooking tutorials.",
-    followers: 98000,
-    link: "https://instagram.com/foodieemma"
-  },
-  {
-    id: "5",
-    username: "StyleQueen_Lisa",
-    email: "lisa@fashionforward.com",
-    bio: "Fashion stylist and designer. Affordable outfit ideas, style tips, and latest fashion trends for every occasion.",
-    followers: 312000,
-    link: "https://instagram.com/stylequeen_lisa"
-  },
-  {
-    id: "6",
-    username: "TechReviewer_Alex",
-    email: "alex@techinsights.com",
-    bio: "Software engineer turned tech reviewer. Deep dives into smartphones, laptops, and emerging technologies.",
-    followers: 278000,
-    link: "https://instagram.com/techreviewer_alex"
-  },
-  {
-    id: "7",
-    username: "HealthyLifestyle_Maya",
-    email: "maya@wellness.com",
-    bio: "Holistic wellness coach. Mental health awareness, meditation practices, and sustainable living tips.",
-    followers: 134000,
-    link: "https://instagram.com/healthylifestyle_maya"
-  },
-  {
-    id: "8",
-    username: "FashionForward_Sam",
-    email: "sam@styletrends.com",
-    bio: "Fashion blogger and trend forecaster. Street style, sustainable fashion, and accessibility in style.",
-    followers: 167000,
-    link: "https://instagram.com/fashionforward_sam"
-  }
-];
+// Define the API response structure
+interface ApiResponse {
+  influencers: Influencer[];
+  count: number;
+}
+
+// Outreach record structure
+interface OutreachRecord {
+  id?: string;
+  campaign_id: number;
+  influencer_id: string;
+  influencer_username: string;
+  influencer_email: string;
+  influencer_followers: number;
+  brand_id: string;
+  email_subject: string;
+  email_body: string;
+  status: 'sent' | 'pending' | 'replied' | 'declined';
+  sent_at: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 function MatchedInfluencers() {
   const location = useLocation();
@@ -96,34 +52,91 @@ function MatchedInfluencers() {
   const [isOutreaching, setIsOutreaching] = useState(false);
   const [campaignInfo, setCampaignInfo] = useState<string>('');
 
-  // Mock API call with delay to simulate real API
+  // Real API call instead of mock data
   const getMatchedInfluencers = async () => {
+    const url = `http://localhost:8000/influencers/query`;
     try {
       setLoading(true);
       setError(null);
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Filter influencers based on query (mock filtering)
-      let filteredInfluencers = mockInfluencers;
-      if (query) {
-        filteredInfluencers = mockInfluencers.filter(inf => 
-          inf.bio.toLowerCase().includes(query.toLowerCase()) ||
-          inf.username.toLowerCase().includes(query.toLowerCase())
-        );
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: query,
+          k: limit,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      return {
-        influencers: filteredInfluencers.slice(0, limit),
-        count: filteredInfluencers.length
-      };
+
+      const data: ApiResponse = await response.json();
+      console.log("Matched Influencers Data:", data);
+      return data;
     } catch (error) {
       console.error("Error fetching matched influencers:", error);
-      setError("An error occurred while fetching influencers");
+      setError(
+        error instanceof Error
+          ? error.message
+          : "An error occurred while fetching influencers"
+      );
       return null;
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Save outreach records to database
+  const saveOutreachRecords = async (selectedData: Influencer[], emailResults: any[], brandId: string) => {
+    try {
+      const outreachRecords: OutreachRecord[] = selectedData.map((influencer, index) => ({
+        campaign_id: campaignId,
+        influencer_id: influencer.id,
+        influencer_username: influencer.username,
+        influencer_email: influencer.email,
+        influencer_followers: influencer.followers,
+        brand_id: brandId,
+        email_subject: emailResults[index]?.subject || 'Partnership Opportunity',
+        email_body: emailResults[index]?.body || 'Partnership opportunity email',
+        status: 'sent' as const,
+        sent_at: new Date().toISOString(),
+      }));
+
+      const { data, error } = await supabase
+        .from('outreach')
+        .insert(outreachRecords)
+        .select();
+
+      if (error) {
+        console.error('Error saving outreach records:', error);
+        throw error;
+      }
+
+      console.log('Outreach records saved:', data);
+
+      // Update campaign status to 'active' if it was 'draft'
+      if (campaignId) {
+        const { error: campaignError } = await supabase
+          .from('campaign')
+          .update({ 
+            status: 'active',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', campaignId);
+
+        if (campaignError) {
+          console.error('Error updating campaign status:', campaignError);
+        }
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in saveOutreachRecords:', error);
+      throw error;
     }
   };
 
@@ -156,20 +169,58 @@ function MatchedInfluencers() {
     setIsOutreaching(true);
     
     try {
-      // Simulate outreach API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Get current user for brand_id
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No authenticated user found');
+      }
       
+      // Get selected influencer data
       const selectedData = influencers.filter(inf => selectedInfluencers.has(inf.id));
       console.log("Selected Influencers for Outreach:", selectedData);
+      
+      if (selectedData.length === 0) {
+        alert("No influencers selected for outreach.");
+        return;
+      }
+      
+      const brand_name = localStorage.getItem('brand_name') || "Your Brand Name";
+      const brand_description = localStorage.getItem('brand_description') || "Your Brand Description";
+      console.log(`Brand Name: ${brand_name} and Brand Description: ${brand_description}`);
+      
+      // Make actual API call to your outreach endpoint
+      const response = await fetch('http://localhost:8000/influencers/outreachEmailGenerator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          influencers_data: selectedData,
+          brand_name: brand_name,
+          brand_description: brand_description,
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Outreach failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log("Outreach result:", result);
+
+      // Save outreach records to database
+      await saveOutreachRecords(selectedData, result.emails || [], session.user.id);
+
+      alert(`Outreach initiated successfully for ${selectedInfluencers.size} influencer(s)! Dashboard will be updated with the outreach status.`);
       setSelectedInfluencers(new Set());
       
       // Navigate back to dashboard after successful outreach
       setTimeout(() => {
         navigate('/dashboard');
-      }, 1000);
+      }, 1500);
     } catch (error) {
       console.error("Outreach failed:", error);
-      alert("Outreach failed. Please try again.");
+      alert(`Outreach failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     } finally {
       setIsOutreaching(false);
     }
@@ -220,7 +271,7 @@ function MatchedInfluencers() {
       <div className="max-w-7xl mx-auto">
         {/* Demo Banner */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-xl mb-6 text-center">
-          <p className="font-semibold">🚀 Demo Mode - This is a working demo with mock influencer data</p>
+          <p className="font-semibold">🚀 Live Mode - Real influencer data from API</p>
           {campaignId && (
             <p className="text-sm mt-1 opacity-90">Continue campaign setup for: {campaignInfo}</p>
           )}
@@ -312,7 +363,7 @@ function MatchedInfluencers() {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          Starting Outreach...
+                          Sending Outreach...
                         </>
                       ) : (
                         <>
