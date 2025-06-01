@@ -79,6 +79,11 @@ const Dashboard = () => {
   const [currentBrand, setCurrentBrand] = useState<Brand | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportLogs, setReportLogs] = useState<any[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportCampaign, setReportCampaign] = useState<any>(null);
 
   // Get current user and brand data
   useEffect(() => {
@@ -226,6 +231,28 @@ const Dashboard = () => {
         break;
       default:
         alert(`Campaign status: ${campaign.status}`);
+    }
+  };
+
+  // Fetch CRM logs for a campaign
+  const handleShowReport = async (campaign: Campaign) => {
+    setShowReportModal(true);
+    setReportCampaign(campaign);
+    setReportLoading(true);
+    setReportError(null);
+    setReportLogs([]);
+    try {
+      const { data, error } = await supabase
+        .from('CRM_logs')
+        .select('content')
+        .eq('campaign_id', campaign.id)
+        .single();
+      if (error) throw error;
+      setReportLogs(Array.isArray(data?.content) ? data.content : []);
+    } catch (err: any) {
+      setReportError(err.message || 'Failed to fetch report logs.');
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -677,16 +704,28 @@ const Dashboard = () => {
                         )}
 
                         <div className="flex justify-between items-center">
-                          <motion.button
-                            onClick={() => handleCampaignAction(campaign)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${actionButton.color}`}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                          >
-                            <span>{actionButton.icon}</span>
-                            {actionButton.text}
-                          </motion.button>
-
+                          {/* Only show report button if status is completed */}
+                          {campaign.status === 'completed' ? (
+                            <motion.button
+                              onClick={() => handleShowReport(campaign)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white`}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <span>📋</span>
+                              View Report
+                            </motion.button>
+                          ) : (
+                            <motion.button
+                              onClick={() => handleCampaignAction(campaign)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${actionButton.color}`}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                            >
+                              <span>{actionButton.icon}</span>
+                              {actionButton.text}
+                            </motion.button>
+                          )}
                           {campaign.status === 'draft' && (
                             <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium">
                               Setup Required
@@ -799,6 +838,43 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative animate-fadeIn">
+            <button
+              onClick={() => setShowReportModal(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold"
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 className="text-2xl font-bold mb-4 text-center text-gray-900">Campaign Report</h2>
+            <div className="mb-2 text-center text-gray-600 font-medium">
+              {reportCampaign?.campaign_name}
+            </div>
+            {reportLoading ? (
+              <div className="text-center py-8 text-lg text-gray-500">Loading report...</div>
+            ) : reportError ? (
+              <div className="text-center py-8 text-red-600">{reportError}</div>
+            ) : reportLogs.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">No chat history found for this campaign.</div>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto px-2">
+                {reportLogs.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-md px-5 py-3 rounded-2xl shadow ${msg.type === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                      <div className="font-semibold mb-1">{msg.type === 'user' ? 'You' : 'AI Agent'}</div>
+                      <div className="whitespace-pre-wrap text-base">{msg.content}</div>
+                      <div className="text-xs mt-2 opacity-70 text-right">{msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

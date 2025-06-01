@@ -7,6 +7,7 @@ import Dashboard from '../pages/Dashboard';
 import CreateCampaign from '../pages/CreateCampaign';
 import MatchedInfluencers from '../pages/MatchedInfluencers';
 import CreateBrandProf from '../pages/CreateBrandProf';
+import NegotiationChat from '../pages/NegotiationChat';
 import supabase from '../utils/supabase';
 
 // Protected Route Component
@@ -126,6 +127,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <MatchedInfluencers />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/negotiation-chat/:campaign_id" 
+          element={
+            <ProtectedRoute>
+              <NegotiationChat />
             </ProtectedRoute>
           } 
         />
