@@ -103,7 +103,7 @@ function AppContent() {
         {/* Public Routes */}
         <Route path="/auth" element={<Auth />} />
         
-        {/* Protected Routes */}
+        {/* Protected Routes - Fixed paths to match navigation */}
         <Route 
           path="/dashboard" 
           element={
@@ -127,6 +127,20 @@ function AppContent() {
               <MatchedInfluencers />
             </ProtectedRoute>
           } 
+        />
+        
+        {/* Legacy routes for backward compatibility */}
+        <Route 
+          path="/app/dashboard" 
+          element={<Navigate to="/dashboard" replace />}
+        />
+        <Route 
+          path="/app/create-campaign" 
+          element={<Navigate to="/create-campaign" replace />}
+        />
+        <Route 
+          path="/app/match_influencers" 
+          element={<Navigate to="/match_influencers" replace />}
         />
         
         {/* Root route - redirect based on auth status */}

@@ -1,166 +1,376 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import supabase from '../utils/supabase';
+
+interface Activity {
+  id: string;
+  type: string;
+  message: string;
+  time: string;
+  icon: string;
+  details: string;
+}
+
+interface Campaign {
+  id: number;
+  created_at: string;
+  brand_id: string;
+  campaign_name: string;
+  description: string;
+  platforms: string;
+  preferred_languages: string;
+  budget: number;
+  start_date: string;
+  end_date: string;
+  status: string;
+  report_id: string;
+  voice_enabled: boolean;
+  matched_creators: any[];
+  brand_name: string;
+}
+
+interface Brand {
+  id: number;
+  created_at: string;
+  brand_name: string;
+  brand_description: string;
+  location: string;
+  brand_id: string;
+}
+
+interface Contract {
+  id: string;
+  template_id: string;
+  influencer_id: string;
+  brand_id: string;
+  status: string;
+  contract_data: any;
+  signed_by: string;
+  signed_at: string;
+  signature_url: string;
+  contract_url: string;
+  created_at: string;
+  updated_at: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [selectedTimeframe, setSelectedTimeframe] = useState('7 days');
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [currentBrand, setCurrentBrand] = useState<Brand | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Influencer Marketing specific data
-  const stats = {
-    activeCampaigns: 12,
-    totalReach: '2.4M',
-    engagementRate: '8.2%',
-    roi: '+156%',
-    pendingCollabs: 8,
-    completedCampaigns: 24
+  // Get current user and brand data
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await fetchBrandData(session.user.id);
+        }
+      } catch (err) {
+        console.error('Error getting current user:', err);
+        setError('Failed to load user data');
+      }
+    };
+
+    getCurrentUser();
+  }, []);
+
+  // Fetch brand data
+  const fetchBrandData = async (userId: string) => {
+    try {
+      const { data: brandData, error: brandError } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('brand_id', userId)
+        .single();
+
+      if (brandError && brandError.code !== 'PGRST116') { // PGRST116 is "not found"
+        throw brandError;
+      }
+
+      if (brandData) {
+        setCurrentBrand(brandData);
+        await fetchCampaigns(brandData.brand_id);
+        await fetchContracts(brandData.brand_id);
+      } else {
+        // No brand found, might be a new user
+        await fetchCampaigns(userId);
+        await fetchContracts(userId);
+      }
+    } catch (err) {
+      console.error('Error fetching brand data:', err);
+      setError('Failed to load brand data');
+    }
   };
 
-  const campaignOverview = {
-    totalSpent: '$45,230',
-    avgCampaignCost: '$3,769',
-    topPerformingNiche: 'Beauty & Lifestyle',
-    monthlyGrowth: '+23.5%'
+  // Fetch campaigns
+  const fetchCampaigns = async (brandId: string) => {
+    try {
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaign')
+        .select('*')
+        .eq('brand_id', brandId)
+        .order('created_at', { ascending: false });
+
+      if (campaignError) {
+        throw campaignError;
+      }
+
+      setCampaigns(campaignData || []);
+    } catch (err) {
+      console.error('Error fetching campaigns:', err);
+      setError('Failed to load campaigns');
+    }
   };
 
-  const activeCampaigns = [
-    {
-      id: 1,
-      name: 'Summer Beauty Collection',
-      brand: 'GlowUp Cosmetics',
-      status: 'active' as CampaignStatus,
-      influencers: 8,
-      reach: '485K',
-      engagement: '9.2%',
-      budget: '$8,500',
-      spent: '$6,200',
-      progress: 73,
-      deadline: '12 days left'
-    },
-    {
-      id: 2,
-      name: 'Fitness App Launch',
-      brand: 'FitTracker Pro',
-      status: 'review' as CampaignStatus,
-      influencers: 5,
-      reach: '320K',
-      engagement: '7.8%',
-      budget: '$5,200',
-      spent: '$4,800',
-      progress: 92,
-      deadline: '3 days left'
-    },
-    {
-      id: 3,
-      name: 'Tech Product Review',
-      brand: 'GadgetHub',
-      status: 'planning' as CampaignStatus,
-      influencers: 0,
-      reach: '0',
-      engagement: '0%',
-      budget: '$12,000',
-      spent: '$0',
-      progress: 15,
-      deadline: '30 days left'
+  // Fetch contracts
+  const fetchContracts = async (brandId: string) => {
+    try {
+      const { data: contractData, error: contractError } = await supabase
+        .from('contracts')
+        .select('*')
+        .eq('brand_id', brandId)
+        .order('created_at', { ascending: false });
+
+      if (contractError) {
+        throw contractError;
+      }
+
+      setContracts(contractData || []);
+    } catch (err) {
+      console.error('Error fetching contracts:', err);
+      // Don't set error here as contracts might not exist yet
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const topInfluencers = [
-    {
-      id: 1,
-      name: 'Sarah Beauty',
-      handle: '@sarah_beauty',
-      avatar: '👩‍🦰',
-      followers: '485K',
-      engagement: '9.2%',
-      niche: 'Beauty',
-      campaigns: 3,
-      totalReach: '1.2M',
-      performance: 'excellent'
-    },
-    {
-      id: 2,
-      name: 'Mike Fitness',
-      handle: '@mike_fitness',
-      avatar: '👨‍💪',
-      followers: '320K',
-      engagement: '7.8%',
-      niche: 'Fitness',
-      campaigns: 2,
-      totalReach: '890K',
-      performance: 'good'
-    },
-    {
-      id: 3,
-      name: 'Emma Lifestyle',
-      handle: '@emma_lifestyle',
-      avatar: '👱‍♀️',
-      followers: '280K',
-      engagement: '8.5%',
-      niche: 'Lifestyle',
-      campaigns: 4,
-      totalReach: '1.5M',
-      performance: 'excellent'
+  // Handle campaign action based on status
+  const handleCampaignAction = (campaign: Campaign) => {
+    switch (campaign.status.toLowerCase()) {
+      case 'draft':
+        // Continue campaign setup by finding influencers
+        navigate('/match_influencers', {
+          state: {
+            campaignId: campaign.id,
+            query: campaign.campaign_name + ' ' + campaign.description,
+            limit: 10,
+          },
+        });
+        break;
+      case 'active':
+        // View campaign details/analytics (for now, just show alert)
+        alert(`Campaign "${campaign.campaign_name}" is currently active. Analytics coming soon!`);
+        break;
+      case 'completed':
+        // View campaign report
+        alert(`Campaign "${campaign.campaign_name}" completed. Report generation coming soon!`);
+        break;
+      default:
+        alert(`Campaign status: ${campaign.status}`);
     }
-  ];
+  };
 
-  const recentActivity = [
-    {
-      id: 1,
-      type: 'campaign_completed',
-      message: 'Summer Beauty Collection campaign completed successfully',
-      time: '2 hours ago',
-      icon: '✅',
-      details: '+485K reach'
-    },
-    {
-      id: 2,
-      type: 'influencer_applied',
-      message: '@tech_reviewer applied to Tech Product Review campaign',
-      time: '4 hours ago',
-      icon: '📝',
-      details: '125K followers'
-    },
-    {
-      id: 3,
-      type: 'content_posted',
-      message: '@sarah_beauty posted sponsored content',
-      time: '6 hours ago',
-      icon: '📸',
-      details: '12.3K likes'
-    },
-    {
-      id: 4,
-      type: 'payment_processed',
-      message: 'Payment of $2,500 sent to @mike_fitness',
-      time: '1 day ago',
-      icon: '💰',
-      details: 'Campaign completed'
+  // Calculate real statistics from data
+  const calculateStats = () => {
+    const activeCampaigns = campaigns.filter(c => c.status === 'active').length;
+    const totalCampaigns = campaigns.length;
+    const completedCampaigns = campaigns.filter(c => c.status === 'completed').length;
+    const draftCampaigns = campaigns.filter(c => c.status === 'draft').length;
+    
+    // Calculate total reach from matched_creators
+    const totalReach = campaigns.reduce((total, campaign) => {
+      if (campaign.matched_creators && Array.isArray(campaign.matched_creators)) {
+        return total + campaign.matched_creators.reduce((sum, creator) => {
+          return sum + (creator.followers || 0);
+        }, 0);
+      }
+      return total;
+    }, 0);
+
+    // Calculate total budget
+    const totalBudget = campaigns.reduce((total, campaign) => total + (campaign.budget || 0), 0);
+    
+    // Calculate average engagement (mock calculation since we don't have actual engagement data)
+    const avgEngagement = totalReach > 0 ? ((totalReach * 0.08) / totalReach * 100).toFixed(1) : '0.0';
+
+    // Calculate ROI (simplified calculation)
+    const estimatedRevenue = totalBudget * 1.5; // Assuming 50% ROI
+    const roi = totalBudget > 0 ? (((estimatedRevenue - totalBudget) / totalBudget) * 100).toFixed(0) : '0';
+
+    return {
+      activeCampaigns,
+      totalCampaigns,
+      completedCampaigns,
+      draftCampaigns,
+      totalReach: formatNumber(totalReach),
+      engagementRate: `${avgEngagement}%`,
+      roi: `+${roi}%`,
+      totalBudget: formatCurrency(totalBudget),
+      pendingCollabs: contracts.filter(c => c.status === 'pending').length
+    };
+  };
+
+  // Format numbers for display
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(1)}M`;
+    } else if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}K`;
     }
-  ];
+    return num.toString();
+  };
 
-  type CampaignStatus = 'active' | 'review' | 'planning' | 'completed';
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
 
-  const getStatusColor = (status: CampaignStatus): string => {
-    switch (status) {
+  // Calculate campaign progress
+  const calculateCampaignProgress = (campaign: Campaign) => {
+    const startDate = new Date(campaign.start_date);
+    const endDate = new Date(campaign.end_date);
+    const currentDate = new Date();
+    
+    if (currentDate < startDate) return 0;
+    if (currentDate > endDate) return 100;
+    
+    const totalDuration = endDate.getTime() - startDate.getTime();
+    const elapsed = currentDate.getTime() - startDate.getTime();
+    
+    return Math.floor((elapsed / totalDuration) * 100);
+  };
+
+  // Get status color
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
       case 'active': return 'bg-green-100 text-green-800 border-green-200';
-      case 'review': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'planning': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'completed': return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'completed': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'draft': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'paused': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  type Performance = 'excellent' | 'good' | 'average' | string;
-
-  const getPerformanceColor = (performance: Performance) => {
-    switch (performance) {
-      case 'excellent': return 'text-green-600';
-      case 'good': return 'text-blue-600';
-      case 'average': return 'text-yellow-600';
-      default: return 'text-gray-600';
+  // Get action button text and style based on status
+  const getActionButton = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'draft':
+        return {
+          text: 'Continue Setup',
+          icon: '🚀',
+          color: 'bg-blue-600 hover:bg-blue-700 text-white'
+        };
+      case 'active':
+        return {
+          text: 'View Analytics',
+          icon: '📊',
+          color: 'bg-green-600 hover:bg-green-700 text-white'
+        };
+      case 'completed':
+        return {
+          text: 'View Report',
+          icon: '📋',
+          color: 'bg-gray-600 hover:bg-gray-700 text-white'
+        };
+      default:
+        return {
+          text: 'View Details',
+          icon: '👁️',
+          color: 'bg-gray-600 hover:bg-gray-700 text-white'
+        };
     }
   };
+
+  // Get time remaining for campaign
+  const getTimeRemaining = (endDate: string) => {
+    const end = new Date(endDate);
+    const now = new Date();
+    const diff = end.getTime() - now.getTime();
+    
+    if (diff <= 0) return 'Completed';
+    
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return `${days} days left`;
+  };
+
+  // Recent activity based on real data
+  const generateRecentActivity = (): Activity[] => {
+    const activities: Activity[] = [];
+    
+    // Add campaign activities
+    campaigns.slice(0, 3).forEach(campaign => {
+      activities.push({
+        id: `campaign-${campaign.id}`,
+        type: 'campaign_created',
+        message: `Campaign "${campaign.campaign_name}" was ${campaign.status}`,
+        time: new Date(campaign.created_at).toLocaleDateString(),
+        icon: campaign.status === 'active' ? '🚀' : campaign.status === 'completed' ? '✅' : '📝',
+        details: formatCurrency(campaign.budget)
+      });
+    });
+
+    // Add contract activities
+    contracts.slice(0, 2).forEach(contract => {
+      activities.push({
+        id: `contract-${contract.id}`,
+        type: 'contract_status',
+        message: `Contract with influencer ${contract.influencer_id} is ${contract.status}`,
+        time: new Date(contract.updated_at).toLocaleDateString(),
+        icon: contract.status === 'signed' ? '✍️' : '📋',
+        details: contract.status
+      });
+    });
+
+    return activities.slice(0, 4);
+  };
+
+  const stats = calculateStats();
+  const recentActivity = generateRecentActivity();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 animate-pulse">
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">Loading Dashboard</h3>
+          <p className="text-gray-600">Fetching your campaign data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-6">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md mx-auto text-center">
+          <div className="text-red-600 text-5xl mb-4">⚠️</div>
+          <h3 className="text-xl font-bold text-red-900 mb-2">Error Loading Dashboard</h3>
+          <p className="text-red-700 mb-6">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-200"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
@@ -173,8 +383,15 @@ const Dashboard = () => {
           transition={{ duration: 0.5 }}
         >
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Campaign Dashboard</h1>
-            <p className="text-gray-600">Manage your influencer marketing campaigns and track performance</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {currentBrand ? `${currentBrand.brand_name} Dashboard` : 'Campaign Dashboard'}
+            </h1>
+            <p className="text-gray-600">
+              {currentBrand 
+                ? `Manage your influencer marketing campaigns for ${currentBrand.brand_name}`
+                : 'Manage your influencer marketing campaigns and track performance'
+              }
+            </p>
           </div>
 
           <div className="flex gap-3">
@@ -227,18 +444,18 @@ const Dashboard = () => {
               subtitle: 'Across all campaigns'
             },
             { 
-              title: 'Avg. Engagement', 
-              value: stats.engagementRate, 
-              icon: '📊', 
+              title: 'Campaign Budget', 
+              value: stats.totalBudget, 
+              icon: '💰', 
               color: 'from-green-500 to-green-600',
-              subtitle: 'Above industry avg (6.2%)'
+              subtitle: 'Total allocated budget'
             },
             { 
               title: 'Campaign ROI', 
               value: stats.roi, 
-              icon: '💰', 
+              icon: '📈', 
               color: 'from-orange-500 to-orange-600',
-              subtitle: 'This quarter'
+              subtitle: 'Estimated return'
             }
           ].map((stat, index) => (
             <motion.div
@@ -268,7 +485,7 @@ const Dashboard = () => {
           >
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Active Campaigns</h2>
+                <h2 className="text-xl font-bold text-gray-900">Your Campaigns</h2>
                 <div className="flex gap-2">
                   {['7 days', '30 days', '90 days'].map((period) => (
                     <button
@@ -286,166 +503,196 @@ const Dashboard = () => {
                 </div>
               </div>
               
-              <div className="space-y-4">
-                {activeCampaigns.map((campaign) => (
-                  <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-shadow">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{campaign.name}</h3>
-                        <p className="text-sm text-gray-600">{campaign.brand}</p>
+              {campaigns.length > 0 ? (
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {campaigns.map((campaign) => {
+                    const progress = calculateCampaignProgress(campaign);
+                    const timeRemaining = getTimeRemaining(campaign.end_date);
+                    const influencerCount = campaign.matched_creators ? campaign.matched_creators.length : 0;
+                    const totalReach = campaign.matched_creators 
+                      ? campaign.matched_creators.reduce((sum, creator) => sum + (creator.followers || 0), 0)
+                      : 0;
+                    const actionButton = getActionButton(campaign.status);
+
+                    return (
+                      <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{campaign.campaign_name}</h3>
+                            <p className="text-sm text-gray-600">{campaign.brand_name}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(campaign.status)}`}>
+                              {campaign.status}
+                            </span>
+                            <span className="text-xs text-gray-500">{timeRemaining}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-4 gap-4 mb-4">
+                          <div>
+                            <p className="text-xs text-gray-500">Influencers</p>
+                            <p className="font-semibold">{influencerCount}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Reach</p>
+                            <p className="font-semibold">{formatNumber(totalReach)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Platforms</p>
+                            <p className="font-semibold">{campaign.platforms || 'All'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Budget</p>
+                            <p className="font-semibold">{formatCurrency(campaign.budget)}</p>
+                          </div>
+                        </div>
+                        
+                        {campaign.status !== 'draft' && (
+                          <>
+                            <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                              <div 
+                                className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${progress}%` }}
+                              ></div>
+                            </div>
+                            <p className="text-xs text-gray-500 mb-3">{progress}% complete</p>
+                          </>
+                        )}
+
+                        <div className="flex justify-between items-center">
+                          <motion.button
+                            onClick={() => handleCampaignAction(campaign)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${actionButton.color}`}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <span>{actionButton.icon}</span>
+                            {actionButton.text}
+                          </motion.button>
+
+                          {campaign.status === 'draft' && (
+                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium">
+                              Setup Required
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(campaign.status)}`}>
-                          {campaign.status}
-                        </span>
-                        <span className="text-xs text-gray-500">{campaign.deadline}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-4 gap-4 mb-3">
-                      <div>
-                        <p className="text-xs text-gray-500">Influencers</p>
-                        <p className="font-semibold">{campaign.influencers}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Reach</p>
-                        <p className="font-semibold">{campaign.reach}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Engagement</p>
-                        <p className="font-semibold">{campaign.engagement}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Spent / Budget</p>
-                        <p className="font-semibold">{campaign.spent} / {campaign.budget}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${campaign.progress}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-gray-500">{campaign.progress}% complete</p>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-4">📋</div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No campaigns yet</h3>
+                  <p className="text-gray-600 mb-4">Create your first campaign to get started</p>
+                  <button
+                    onClick={() => navigate('/create-campaign')}
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-200"
+                  >
+                    Create Campaign
+                  </button>
+                </div>
+              )}
             </div>
           </motion.div>
 
           <div className="space-y-6">
-            {/* Top Performing Influencers */}
+            {/* Recent Activity */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">Top Performers</h2>
+                <h2 className="text-xl font-bold text-gray-900 mb-6">Recent Activity</h2>
                 
-                <div className="space-y-4">
-                  {topInfluencers.map((influencer) => (
-                    <div key={influencer.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-xl">
-                        {influencer.avatar}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-sm text-gray-900">{influencer.name}</h3>
-                        <p className="text-xs text-gray-600">{influencer.handle}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">{influencer.followers}</span>
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">{influencer.engagement}</span>
-                          <span className={`text-xs font-medium ${getPerformanceColor(influencer.performance)}`}>
-                            {influencer.performance}
-                          </span>
+                {recentActivity.length > 0 ? (
+                  <div className="space-y-4">
+                    {recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-start gap-3">
+                        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm">{activity.icon}</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-900 mb-1">{activity.message}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs text-gray-500">{activity.time}</p>
+                            <span className="text-xs text-blue-600 font-medium">{activity.details}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-
-                <button 
-                  onClick={() => navigate('/match_influencers')}
-                  className="w-full mt-4 bg-blue-50 text-blue-600 py-3 rounded-xl font-medium hover:bg-blue-100 transition-colors"
-                >
-                  Discover More Influencers
-                </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-gray-500">No recent activity</p>
+                  </div>
+                )}
               </div>
             </motion.div>
 
-            {/* Recent Activity */}
+            {/* Quick Stats */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.4 }}
             >
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">Recent Activity</h2>
+                <h2 className="text-xl font-bold text-gray-900 mb-6">Campaign Summary</h2>
                 
                 <div className="space-y-4">
-                  {recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm">{activity.icon}</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900 mb-1">{activity.message}</p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-gray-500">{activity.time}</p>
-                          <span className="text-xs text-blue-600 font-medium">{activity.details}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Total Campaigns</span>
+                    <span className="font-bold text-lg">{stats.totalCampaigns}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Active</span>
+                    <span className="font-bold text-lg text-green-600">{stats.activeCampaigns}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Completed</span>
+                    <span className="font-bold text-lg text-blue-600">{stats.completedCampaigns}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Draft</span>
+                    <span className="font-bold text-lg text-orange-600">{stats.draftCampaigns}</span>
+                  </div>
                 </div>
 
-                <button className="w-full mt-4 text-gray-600 text-sm hover:text-gray-800 transition-colors">
-                  View All Activity
+                {stats.draftCampaigns > 0 && (
+                  <div className="mt-6 p-4 bg-orange-50 rounded-xl border border-orange-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-orange-600">⚠️</span>
+                      <span className="text-sm font-semibold text-orange-800">Action Required</span>
+                    </div>
+                    <p className="text-sm text-orange-700 mb-3">
+                      You have {stats.draftCampaigns} draft campaign{stats.draftCampaigns > 1 ? 's' : ''} waiting to be completed.
+                    </p>
+                    <button 
+                      onClick={() => {
+                        const draftCampaign = campaigns.find(c => c.status === 'draft');
+                        if (draftCampaign) {
+                          handleCampaignAction(draftCampaign);
+                        }
+                      }}
+                      className="w-full bg-orange-600 text-white py-2 rounded-lg font-medium hover:bg-orange-700 transition-colors text-sm"
+                    >
+                      Continue Setup
+                    </button>
+                  </div>
+                )}
+
+                <button 
+                  onClick={() => navigate('/match_influencers')}
+                  className="w-full mt-6 bg-blue-50 text-blue-600 py-3 rounded-xl font-medium hover:bg-blue-100 transition-colors"
+                >
+                  Discover More Influencers
                 </button>
               </div>
             </motion.div>
           </div>
         </div>
-
-        {/* Campaign Performance Overview */}
-        <motion.div 
-          className="mt-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-        >
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Campaign Performance Overview</h2>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-sm text-gray-600">Total Campaign Spend</p>
-                  <p className="text-2xl font-bold text-gray-900">{campaignOverview.totalSpent}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-600">Avg. Cost per Campaign</p>
-                  <p className="text-2xl font-bold text-gray-900">{campaignOverview.avgCampaignCost}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-600">Monthly Growth</p>
-                  <p className="text-2xl font-bold text-green-600">{campaignOverview.monthlyGrowth}</p>
-                </div>
-              </div>
-            </div>
-            
-            {/* Performance Chart Placeholder */}
-            <div className="h-64 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl flex items-center justify-center">
-              <div className="text-center">
-                <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <p className="text-gray-500 font-medium">Campaign performance analytics</p>
-                <p className="text-sm text-gray-400 mt-1">ROI, reach, and engagement trends over time</p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
       </div>
     </div>
   );
