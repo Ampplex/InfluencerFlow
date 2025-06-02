@@ -11,9 +11,6 @@
     }
   ],
   "functions": {
-    "api/contracts/preview.ts": {
-      "maxDuration": 30
-    },
     "api/contracts/generate.ts": {
       "maxDuration": 10
     },
