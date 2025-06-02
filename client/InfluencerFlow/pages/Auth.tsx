@@ -250,7 +250,7 @@ const InfluencerFlowAuth: React.FC<AuthProps> = () => {
               <div className="absolute bottom-20 right-20 w-24 h-24 border border-blue-500/30 rotate-12 rounded-lg"></div>
               <div className="absolute bottom-1/3 left-1/3 w-8 h-8 bg-purple-500/50 rounded-full"></div>
               <div className="absolute inset-0 bg-black/40"></div> {/* Dark overlay */}
-              <img src="/public/auth.svg" alt="Illustration" className="w-full h-full object-cover rounded-3xl filter blur-sm opacity-75" /> {/* Added opacity-75 */}
+              <img src="/auth.svg" alt="Illustration" className="w-full h-full object-cover rounded-3xl filter blur-sm opacity-75" /> {/* Added opacity-75 */}
             </div>
 
             {/* Content */}
@@ -258,7 +258,7 @@ const InfluencerFlowAuth: React.FC<AuthProps> = () => {
               {/* Placeholder for illustration */}
                 <div className="mb-8">
                 <div className="w-48 h-48 mx-auto bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-3xl border border-white/20 flex items-center justify-center backdrop-blur-sm">
-                  <img src="/public/auth.svg" alt="Illustration" className="w-full h-full object-cover rounded-3xl" />
+                  <img src="/auth.svg" alt="Illustration" className="w-full h-full object-cover rounded-3xl" />
                 </div>
               </div>
 

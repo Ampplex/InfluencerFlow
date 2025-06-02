@@ -1,7 +1,9 @@
+// pages/ContractManager.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, Download, CheckCircle, Clock, XCircle, Upload, User, Building, DollarSign, Calendar, Package, FileSignature, AlertCircle } from 'lucide-react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { FileText, Download, CheckCircle, Clock, XCircle, Upload, User, Building, DollarSign, Calendar, Package, FileSignature, AlertCircle, CreditCard } from 'lucide-react';
 
-// Types matching your backend
+// Types matching your Vercel functions
 interface ContractTemplate {
   influencer_name: string;
   brand_name: string;
@@ -23,6 +25,9 @@ interface Contract {
   signed_at?: string;
   signature_url?: string;
   contract_url?: string;
+  payment_status?: PaymentStatus;
+  payment_id?: string;
+  razorpay_order_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -34,10 +39,51 @@ enum ContractStatus {
   REJECTED = 'REJECTED'
 }
 
-// API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://13.235.43.100:5050';
+enum PaymentStatus {
+  PENDING = 'PENDING',
+  INITIATED = 'INITIATED',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED'
+}
 
-// Real API functions that connect to your backend
+// Razorpay types
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpayResponse) => void;
+  prefill: {
+    name: string;
+    email: string;
+    contact: string;
+  };
+  theme: {
+    color: string;
+  };
+  modal: {
+    ondismiss: () => void;
+  };
+}
+
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
+// API Configuration - Fixed for Vite
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://13.235.43.100:5050';
+
+// API functions using your existing backend
 const api = {
   previewContract: async (data: ContractTemplate): Promise<Blob> => {
     const response = await fetch(`${API_BASE_URL}/api/contracts/preview`, {
@@ -47,7 +93,7 @@ const api = {
     });
     
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ error: 'Failed to preview contract' }));
       throw new Error(error.error || 'Failed to preview contract');
     }
     
@@ -62,7 +108,7 @@ const api = {
     });
     
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ error: 'Failed to generate contract' }));
       throw new Error(error.error || 'Failed to generate contract');
     }
     
@@ -82,8 +128,42 @@ const api = {
     });
     
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ error: 'Failed to sign contract' }));
       throw new Error(error.error || 'Failed to sign contract');
+    }
+    
+    return response.json();
+  },
+
+  createPaymentOrder: async (contractId: string, amount: number): Promise<{ order_id: string; key: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/payments/create-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        contract_id: contractId, 
+        amount: Math.round(amount * 100), // Convert USD to cents
+        currency: 'USD'
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to create payment order' }));
+      throw new Error(error.error || 'Failed to create payment order');
+    }
+    
+    return response.json();
+  },
+
+  verifyPayment: async (paymentData: RazorpayResponse & { contract_id: string }): Promise<Contract> => {
+    const response = await fetch(`${API_BASE_URL}/api/payments/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(paymentData)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Payment verification failed' }));
+      throw new Error(error.error || 'Payment verification failed');
     }
     
     return response.json();
@@ -93,7 +173,7 @@ const api = {
     const response = await fetch(`${API_BASE_URL}/api/contracts/${id}`);
     
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ error: 'Failed to fetch contract' }));
       throw new Error(error.error || 'Failed to fetch contract');
     }
     
@@ -104,12 +184,39 @@ const api = {
     const response = await fetch(`${API_BASE_URL}/api/contracts?user_id=${userId}&role=${role}`);
     
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ error: 'Failed to fetch contracts' }));
       throw new Error(error.error || 'Failed to fetch contracts');
     }
     
     return response.json();
   }
+};
+
+// Razorpay Integration Hook
+const useRazorpay = () => {
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+    
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
+
+  const initiatePayment = (options: RazorpayOptions) => {
+    if (!window.Razorpay) {
+      throw new Error('Razorpay SDK not loaded');
+    }
+    
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  };
+
+  return { initiatePayment };
 };
 
 // Error Display Component
@@ -137,26 +244,41 @@ const LoadingSpinner = ({ message }: { message: string }) => (
 );
 
 // Status Badge Component
-const StatusBadge = ({ status }: { status: ContractStatus }) => {
+const StatusBadge = ({ status, paymentStatus }: { status: ContractStatus; paymentStatus?: PaymentStatus }) => {
   const statusConfig = {
     [ContractStatus.DRAFT]: { color: 'bg-gray-100 text-gray-800', icon: FileText },
     [ContractStatus.PENDING_SIGNATURE]: { color: 'bg-yellow-100 text-yellow-800', icon: Clock },
     [ContractStatus.SIGNED]: { color: 'bg-green-100 text-green-800', icon: CheckCircle },
     [ContractStatus.REJECTED]: { color: 'bg-red-100 text-red-800', icon: XCircle }
   };
+
+  const paymentConfig = {
+    [PaymentStatus.PENDING]: { color: 'bg-orange-100 text-orange-800', icon: Clock },
+    [PaymentStatus.INITIATED]: { color: 'bg-blue-100 text-blue-800', icon: CreditCard },
+    [PaymentStatus.COMPLETED]: { color: 'bg-green-100 text-green-800', icon: CheckCircle },
+    [PaymentStatus.FAILED]: { color: 'bg-red-100 text-red-800', icon: XCircle }
+  };
   
   const config = statusConfig[status];
   const Icon = config.icon;
   
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
-      <Icon className="w-3 h-3 mr-1" />
-      {status.replace('_', ' ')}
-    </span>
+    <div className="flex flex-col gap-1">
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
+        <Icon className="w-3 h-3 mr-1" />
+        {status.replace('_', ' ')}
+      </span>
+      {paymentStatus && (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${paymentConfig[paymentStatus].color}`}>
+          <CreditCard className="w-3 h-3 mr-1" />
+          Payment: {paymentStatus}
+        </span>
+      )}
+    </div>
   );
 };
 
-// Contract Form Component
+// Contract Form Component (truncated for brevity - same as previous)
 const ContractForm = ({ onContractCreated }: { onContractCreated: () => void }) => {
   const [formData, setFormData] = useState<ContractTemplate>({
     influencer_name: '',
@@ -210,16 +332,14 @@ const ContractForm = ({ onContractCreated }: { onContractCreated: () => void }) 
       setLoading(true);
       setError(null);
       
-      // TODO: Get these from user selection/auth
       const contractData = {
         ...formData,
-        influencer_id: 'inf-' + Date.now(), // Replace with actual influencer selection
-        brand_id: 'brand-' + Date.now() // Replace with actual user ID from auth
+        influencer_id: 'inf-' + Date.now(),
+        brand_id: 'brand-' + Date.now()
       };
       
       await api.generateContract(contractData);
       
-      // Reset form
       setFormData({
         influencer_name: '',
         brand_name: '',
@@ -284,7 +404,7 @@ const ContractForm = ({ onContractCreated }: { onContractCreated: () => void }) 
             onChange={(e) => handleChange('rate', Number(e.target.value))}
             min="0"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter compensation amount"
+            placeholder="Enter compensation amount in USD"
           />
         </div>
         
@@ -364,168 +484,51 @@ const ContractForm = ({ onContractCreated }: { onContractCreated: () => void }) 
   );
 };
 
-// Signature Upload Component
-const SignatureUpload = ({ contractId: _contractId, onSign }: { contractId: string; onSign: (file: File) => void }) => {
-  const [dragOver, setDragOver] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleFileSelect(files[0]);
-    }
-  };
-
-  const handleFileSelect = (file: File) => {
-    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-      alert('Please select a PNG or JPEG image file');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
-      return;
-    }
-    setSelectedFile(file);
-  };
-
-  const handleUpload = () => {
-    if (selectedFile) {
-      onSign(selectedFile);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div
-        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
-          dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-        }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-        <p className="text-lg font-medium text-gray-700 mb-2">Upload Signature</p>
-        <p className="text-sm text-gray-500 mb-4">
-          Drag and drop your signature image, or click to browse
-        </p>
-        <p className="text-xs text-gray-400">
-          PNG or JPEG format, max 5MB
-        </p>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/jpg"
-          onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
-          className="hidden"
-        />
-      </div>
-      
-      {selectedFile && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-green-800">{selectedFile.name}</p>
-              <p className="text-sm text-green-600">
-                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </p>
-            </div>
-            <button
-              onClick={handleUpload}
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
-            >
-              Sign Contract
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Contract List Component
-const ContractList = ({ contracts, onContractClick, loading }: { 
-  contracts: Contract[]; 
-  onContractClick: (contract: Contract) => void;
-  loading: boolean;
-}) => {
-  if (loading) {
-    return <LoadingSpinner message="Loading contracts..." />;
-  }
-
-  return (
-    <div className="space-y-4">
-      {contracts.map((contract) => (
-        <div
-          key={contract.id}
-          className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
-          onClick={() => onContractClick(contract)}
-        >
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {contract.contract_data.brand_name} × {contract.contract_data.influencer_name}
-              </h3>
-              <p className="text-gray-600 mt-1">${contract.contract_data.rate.toLocaleString()}</p>
-            </div>
-            <StatusBadge status={contract.status} />
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500">Timeline:</span>
-              <p className="font-medium">{contract.contract_data.timeline}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Created:</span>
-              <p className="font-medium">{new Date(contract.created_at).toLocaleDateString()}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Deliverables:</span>
-              <p className="font-medium truncate">{contract.contract_data.deliverables}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Payment:</span>
-              <p className="font-medium truncate">{contract.contract_data.payment_terms}</p>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// Main App Component
-const ContractApp = () => {
-  const [activeTab, setActiveTab] = useState<'create' | 'list' | 'detail'>('create');
+// Main Contract Manager Component
+const ContractManager = () => {
+  const params = useParams();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'create' | 'list' | 'detail'>('list');
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   
-  // TODO: Replace with real auth system
   const [userRole] = useState<'influencer' | 'brand'>('brand');
   const [userId] = useState('user-123');
+  const { initiatePayment } = useRazorpay();
+
+  // Determine active tab based on URL
+  useEffect(() => {
+    if (params.id) {
+      setActiveTab('detail');
+      loadContract(params.id);
+    } else if (window.location.pathname.includes('/create')) {
+      setActiveTab('create');
+    } else {
+      setActiveTab('list');
+    }
+  }, [params.id]);
 
   useEffect(() => {
     if (activeTab === 'list') {
       loadContracts();
     }
   }, [activeTab]);
+
+  const loadContract = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const contract = await api.getContract(id);
+      setSelectedContract(contract);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadContracts = async () => {
     try {
@@ -543,42 +546,6 @@ const ContractApp = () => {
   const handleContractCreated = () => {
     setActiveTab('list');
     loadContracts();
-  };
-
-  const handleSignContract = async (file: File) => {
-    if (!selectedContract) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      const updatedContract = await api.signContract(selectedContract.id, file, userId);
-      
-      setContracts(prev => 
-        prev.map(c => c.id === selectedContract.id ? updatedContract : c)
-      );
-      setSelectedContract(updatedContract);
-      alert('Contract signed successfully!');
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleContractClick = async (contract: Contract) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const freshContract = await api.getContract(contract.id);
-      setSelectedContract(freshContract);
-      setActiveTab('detail');
-    } catch (err: any) {
-      setSelectedContract(contract);
-      setActiveTab('detail');
-    } finally {
-      setLoading(false);
-    }
   };
 
   return (
@@ -649,12 +616,50 @@ const ContractApp = () => {
                   Create Contract
                 </button>
               </div>
+            ) : loading ? (
+              <LoadingSpinner message="Loading contracts..." />
             ) : (
-              <ContractList 
-                contracts={contracts} 
-                onContractClick={handleContractClick}
-                loading={loading}
-              />
+              <div className="space-y-4">
+                {contracts.map((contract) => (
+                  <div
+                    key={contract.id}
+                    className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => {
+                      setSelectedContract(contract);
+                      setActiveTab('detail');
+                    }}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {contract.contract_data.brand_name} × {contract.contract_data.influencer_name}
+                        </h3>
+                        <p className="text-gray-600 mt-1">${contract.contract_data.rate.toLocaleString()}</p>
+                      </div>
+                      <StatusBadge status={contract.status} paymentStatus={contract.payment_status} />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-500">Timeline:</span>
+                        <p className="font-medium">{contract.contract_data.timeline}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Created:</span>
+                        <p className="font-medium">{new Date(contract.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Deliverables:</span>
+                        <p className="font-medium truncate">{contract.contract_data.deliverables}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Payment:</span>
+                        <p className="font-medium truncate">{contract.contract_data.payment_terms}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -673,7 +678,7 @@ const ContractApp = () => {
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">
                     {selectedContract.contract_data.brand_name} × {selectedContract.contract_data.influencer_name}
                   </h2>
-                  <StatusBadge status={selectedContract.status} />
+                  <StatusBadge status={selectedContract.status} paymentStatus={selectedContract.payment_status} />
                 </div>
                 <div className="flex space-x-3">
                   <button
@@ -689,56 +694,29 @@ const ContractApp = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Contract Details */}
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Contract Details</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm text-gray-500">Rate</label>
-                    <p className="text-lg font-semibold">${selectedContract.contract_data.rate.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Timeline</label>
-                    <p className="font-medium">{selectedContract.contract_data.timeline}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Deliverables</label>
-                    <p className="font-medium">{selectedContract.contract_data.deliverables}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-gray-500">Payment Terms</label>
-                    <p className="font-medium">{selectedContract.contract_data.payment_terms}</p>
-                  </div>
-                  {selectedContract.contract_data.special_requirements && (
-                    <div>
-                      <label className="text-sm text-gray-500">Special Requirements</label>
-                      <p className="font-medium">{selectedContract.contract_data.special_requirements}</p>
-                    </div>
-                  )}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Contract Details</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-gray-500">Rate</label>
+                  <p className="text-lg font-semibold">${selectedContract.contract_data.rate.toLocaleString()}</p>
                 </div>
-              </div>
-
-              {/* Signature Section */}
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Signature</h3>
-                {selectedContract.status === ContractStatus.SIGNED ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">Contract Signed</h4>
-                    <p className="text-gray-600">
-                      Signed on {selectedContract.signed_at ? new Date(selectedContract.signed_at).toLocaleDateString() : 'Unknown date'}
-                    </p>
-                  </div>
-                ) : (
+                <div>
+                  <label className="text-sm text-gray-500">Timeline</label>
+                  <p className="font-medium">{selectedContract.contract_data.timeline}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-500">Deliverables</label>
+                  <p className="font-medium">{selectedContract.contract_data.deliverables}</p>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-500">Payment Terms</label>
+                  <p className="font-medium">{selectedContract.contract_data.payment_terms}</p>
+                </div>
+                {selectedContract.contract_data.special_requirements && (
                   <div>
-                    <p className="text-gray-600 mb-6">
-                      This contract is awaiting signature. Upload your signature image to complete the agreement.
-                    </p>
-                    <SignatureUpload 
-                      contractId={selectedContract.id}
-                      onSign={handleSignContract}
-                    />
+                    <label className="text-sm text-gray-500">Special Requirements</label>
+                    <p className="font-medium">{selectedContract.contract_data.special_requirements}</p>
                   </div>
                 )}
               </div>
@@ -750,4 +728,4 @@ const ContractApp = () => {
   );
 };
 
-export default ContractApp;
+export default ContractManager;

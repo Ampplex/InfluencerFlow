@@ -1,0 +1,43 @@
+
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/contracts/preview.ts": {
+      "maxDuration": 30
+    },
+    "api/contracts/generate.ts": {
+      "maxDuration": 10
+    },
+    "api/contracts/sign.ts": {
+      "maxDuration": 30
+    },
+    "api/payments/create-order.ts": {
+      "maxDuration": 10
+    },
+    "api/payments/verify.ts": {
+      "maxDuration": 10
+    }
+  },
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
