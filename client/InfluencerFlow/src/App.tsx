@@ -7,6 +7,8 @@ import Dashboard from '../pages/Dashboard';
 import CreateCampaign from '../pages/CreateCampaign';
 import MatchedInfluencers from '../pages/MatchedInfluencers';
 import NegotiationChat from '../pages/NegotiationChat';
+import ContractManager from '../pages/ContractForm'; // New contract page
+import PaymentTest from '../components/PaymentTest'; // New payment test component
 import supabase from '../utils/supabase';
 
 // Protected Route Component
@@ -104,7 +106,10 @@ function AppContent() {
         {/* Public Routes */}
         <Route path="/auth" element={<Auth />} />
         
-        {/* Protected Routes - Fixed paths to match navigation */}
+        {/* 🆕 NEW: Payment Test (Public - No auth needed) */}
+        <Route path="/payment-test" element={<PaymentTest />} />
+        
+        {/* Protected Routes */}
         <Route 
           path="/dashboard" 
           element={
@@ -138,6 +143,42 @@ function AppContent() {
           } 
         />
         
+        {/* 🆕 NEW: Contract Management Routes */}
+        <Route 
+          path="/contracts" 
+          element={
+            <ProtectedRoute>
+              <ContractManager />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/contracts/create" 
+          element={
+            <ProtectedRoute>
+              <ContractManager />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/contracts/:id" 
+          element={
+            <ProtectedRoute>
+              <ContractManager />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* 🆕 NEW: Payment Test (Protected version) */}
+        <Route 
+          path="/test-payment" 
+          element={
+            <ProtectedRoute>
+              <PaymentTest />
+            </ProtectedRoute>
+          } 
+        />
+        
         {/* Legacy routes for backward compatibility */}
         <Route 
           path="/app/dashboard" 
@@ -150,6 +191,10 @@ function AppContent() {
         <Route 
           path="/app/match_influencers" 
           element={<Navigate to="/match_influencers" replace />}
+        />
+        <Route 
+          path="/app/contracts" 
+          element={<Navigate to="/contracts" replace />}
         />
         
         {/* Root route - redirect based on auth status */}
