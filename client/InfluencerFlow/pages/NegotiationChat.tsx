@@ -57,7 +57,7 @@ const NegotiationChat: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Use localhost for development - change this to your actual backend URL in production
-  const API_BASE_URL = 'http://13.233.241.1:3000';
+  const API_BASE_URL = 'https://influencerflow-ai-services-1.onrender.com';
 
   const [outreachStatus, setOutreachStatus] = useState<OutreachStatus>('sent');
   const [influencerId, _setInfluencerId] = useState<string>('test_influencer'); // TODO: Replace with actual influencer id logic
@@ -485,7 +485,7 @@ const NegotiationChat: React.FC = () => {
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Brand Budget (₹)
+                    Brand Budget ($)
                   </label>
                   <input
                     type="number"
