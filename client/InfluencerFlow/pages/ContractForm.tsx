@@ -35,7 +35,7 @@ enum ContractStatus {
 }
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://13.235.43.100:5050';
 
 // Real API functions that connect to your backend
 const api = {

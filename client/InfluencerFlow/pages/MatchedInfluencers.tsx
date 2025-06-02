@@ -53,7 +53,7 @@ function MatchedInfluencers() {
 
   // Real API call instead of mock data
   const getMatchedInfluencers = async () => {
-    const url = `http://localhost:5050/influencers/query`;
+    const url = `http://13.235.43.100:5050/influencers/query`;
     try {
       setLoading(true);
       setError(null);
@@ -188,7 +188,7 @@ function MatchedInfluencers() {
       console.log(`Brand Name: ${brand_name} and Brand Description: ${brand_description}`);
       
       // Make actual API call to your outreach endpoint
-      const response = await fetch('http://localhost:5050/influencers/outreachEmailGenerator', {
+      const response = await fetch('http://13.235.43.100:5050/influencers/outreachEmailGenerator', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

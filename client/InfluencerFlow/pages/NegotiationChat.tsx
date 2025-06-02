@@ -57,7 +57,7 @@ const NegotiationChat: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Use localhost for development - change this to your actual backend URL in production
-  const API_BASE_URL = 'http://localhost:8000';
+  const API_BASE_URL = 'http://13.233.241.1:3000';
 
   const [outreachStatus, setOutreachStatus] = useState<OutreachStatus>('sent');
   const [influencerId, _setInfluencerId] = useState<string>('test_influencer'); // TODO: Replace with actual influencer id logic
