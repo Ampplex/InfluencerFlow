@@ -135,7 +135,7 @@ function AppContent() {
           } 
         />
         <Route 
-          path="/chat" 
+          path="/negotiation-chat/:campaign_id/:email" 
           element={
             <ProtectedRoute>
               <NegotiationChat />
