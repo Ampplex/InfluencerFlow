@@ -237,20 +237,51 @@ const Dashboard = () => {
   };
 
   // Fetch CRM logs for a campaign
-  const handleShowReport = async (campaign: Campaign) => {
+  const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
     setShowReportModal(true);
     setReportCampaign(campaign);
     setReportLoading(true);
     setReportError(null);
     setReportLogs([]);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('CRM_logs')
         .select('content')
-        .eq('campaign_id', campaign.id)
-        .single();
-      if (error) throw error;
-      setReportLogs(Array.isArray(data?.content) ? data.content : []);
+        .eq('campaign_id', campaign.id);
+
+      if (influencerId) {
+        query = query.eq('influencer_id', influencerId);
+        const { data, error } = await query.single();
+        if (error) {
+          if (error.code === 'PGRST116') { // No rows found
+            setReportLogs([]);
+          } else {
+            throw error;
+          }
+        }
+        setReportLogs(Array.isArray(data?.content) ? data.content : []);
+      } else {
+        // General campaign report: fetch all CRM logs for the campaign
+        const { data, error } = await query; // No .single() here
+        if (error) {
+          if (error.code === 'PGRST116') { // No rows found
+            setReportLogs([]);
+          } else {
+            throw error;
+          }
+        }
+        let allLogs: any[] = [];
+        if (data) {
+          data.forEach((logEntry: any) => {
+            if (Array.isArray(logEntry.content)) {
+              allLogs = allLogs.concat(logEntry.content);
+            }
+          });
+        }
+        // Sort the combined logs by timestamp before setting
+        allLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        setReportLogs(allLogs);
+      }
     } catch (err: any) {
       setReportError(err.message || 'Failed to fetch report logs.');
     } finally {
@@ -813,6 +844,12 @@ const Dashboard = () => {
                                           className="px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-medium"
                                         >
                                           Deny
+                                        </button>
+                                        <button
+                                          onClick={() => handleShowReport(campaign, outreach.influencer_id)}
+                                          className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
+                                        >
+                                          View Chat
                                         </button>
                                       </div>
                                     </div>

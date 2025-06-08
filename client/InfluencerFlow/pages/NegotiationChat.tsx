@@ -188,18 +188,22 @@ const NegotiationChat: React.FC = () => {
 
   // Helper to log CRM message as JSON array in content column
   const logCRMMessage = async (content: string, type: 'user' | 'bot') => {
-    if (!campaign_id) return;
+    if (!campaign_id || !influencer_id) {
+      console.warn("Campaign ID or Influencer ID is missing for logCRMMessage.");
+      return;
+    }
     const messageObj = {
       content,
       type,
       timestamp: new Date().toISOString(),
     };
     try {
-      // Try to fetch existing CRM_logs row for this campaign
+      // Try to fetch existing CRM_logs row for this campaign and influencer
       const { data, error } = await supabase
         .from('CRM_logs')
         .select('id, content')
         .eq('campaign_id', Number(campaign_id))
+        .eq('influencer_id', influencer_id)
         .single();
       if (error && error.code !== 'PGRST116') {
         // Not a 'no rows found' error
@@ -221,7 +225,7 @@ const NegotiationChat: React.FC = () => {
         }
       } else {
         // No row exists, insert new
-        console.log('DEBUG influencer_id', influencerId)
+        console.log('DEBUG influencer_id', influencer_id)
         const { error: insertError } = await supabase
           .from('CRM_logs')
           .insert([
