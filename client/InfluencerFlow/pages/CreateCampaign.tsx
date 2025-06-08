@@ -202,7 +202,6 @@ const CreateCampaign = () => {
         brand_name: formData.brand_name,
         voice_enabled: formData.voice_enabled,
         status: 'draft',
-        matched_creators: [],
         report_id: crypto.randomUUID(),
       };
       
