@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { FileText, Download, CheckCircle, Clock, XCircle, Upload, User, Building, DollarSign, Calendar, Package, FileSignature, AlertCircle, CreditCard } from 'lucide-react';
+import { ContractCreationForm } from '../components/contracts/ContractCreationForm';
 
 // Types matching your Vercel functions
 interface ContractTemplate {
@@ -279,206 +280,12 @@ const StatusBadge = ({ status, paymentStatus }: { status: ContractStatus; paymen
 };
 
 // Contract Form Component (truncated for brevity - same as previous)
-const ContractForm = ({ onContractCreated }: { onContractCreated: () => void }) => {
-  const [formData, setFormData] = useState<ContractTemplate>({
-    influencer_name: '',
-    brand_name: '',
-    rate: 0,
-    timeline: '',
-    deliverables: '',
-    payment_terms: '',
-    special_requirements: ''
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleChange = (field: keyof ContractTemplate, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
-  };
-
-  const validateForm = (): boolean => {
-    if (!formData.influencer_name || !formData.brand_name || !formData.rate || 
-        !formData.timeline || !formData.deliverables || !formData.payment_terms) {
-      setError('Please fill in all required fields');
-      return false;
-    }
-    return true;
-  };
-
-  const handlePreview = async () => {
-    if (!validateForm()) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const pdfBlob = await api.previewContract(formData);
-      const url = URL.createObjectURL(pdfBlob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGenerate = async () => {
-    if (!validateForm()) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const contractData = {
-        ...formData,
-        influencer_id: 'inf-' + Date.now(),
-        brand_id: 'brand-' + Date.now()
-      };
-      
-      await api.generateContract(contractData);
-      
-      setFormData({
-        influencer_name: '',
-        brand_name: '',
-        rate: 0,
-        timeline: '',
-        deliverables: '',
-        payment_terms: '',
-        special_requirements: ''
-      });
-      
-      alert('Contract generated successfully!');
-      onContractCreated();
-      
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+const ContractForm: React.FC = () => {
   return (
-    <div className="space-y-6 bg-white p-6 rounded-lg shadow-sm border">
-      {error && <ErrorMessage error={error} onRetry={() => setError(null)} />}
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <User className="w-4 h-4 inline mr-2" />
-            Influencer Name *
-          </label>
-          <input
-            type="text"
-            value={formData.influencer_name}
-            onChange={(e) => handleChange('influencer_name', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter influencer name"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <Building className="w-4 h-4 inline mr-2" />
-            Brand Name *
-          </label>
-          <input
-            type="text"
-            value={formData.brand_name}
-            onChange={(e) => handleChange('brand_name', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter brand name"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <DollarSign className="w-4 h-4 inline mr-2" />
-            Rate ($) *
-          </label>
-          <input
-            type="number"
-            value={formData.rate}
-            onChange={(e) => handleChange('rate', Number(e.target.value))}
-            min="0"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter compensation amount in USD"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            <Calendar className="w-4 h-4 inline mr-2" />
-            Timeline *
-          </label>
-          <input
-            type="text"
-            value={formData.timeline}
-            onChange={(e) => handleChange('timeline', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="e.g., 30 days, 2 weeks"
-          />
-        </div>
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          <Package className="w-4 h-4 inline mr-2" />
-          Deliverables *
-        </label>
-        <textarea
-          value={formData.deliverables}
-          onChange={(e) => handleChange('deliverables', e.target.value)}
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Describe the work to be delivered (e.g., 2 Instagram posts, 1 story)"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Payment Terms *
-        </label>
-        <input
-          type="text"
-          value={formData.payment_terms}
-          onChange={(e) => handleChange('payment_terms', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="e.g., 50% upfront, 50% on completion"
-        />
-      </div>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Special Requirements (Optional)
-        </label>
-        <textarea
-          value={formData.special_requirements || ''}
-          onChange={(e) => handleChange('special_requirements', e.target.value)}
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Any additional requirements or notes"
-        />
-      </div>
-      
-      <div className="flex gap-4">
-        <button
-          onClick={handlePreview}
-          disabled={loading}
-          className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {loading ? 'Generating Preview...' : 'Preview Contract'}
-        </button>
-        
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {loading ? 'Generating Contract...' : 'Generate & Save Contract'}
-        </button>
+    <div className="container mx-auto px-4 py-8">
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8">Create Contract</h1>
+        <ContractCreationForm />
       </div>
     </div>
   );
@@ -594,7 +401,7 @@ const ContractManager = () => {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Create New Contract</h2>
               <p className="text-gray-600">Fill in the contract details to generate a new agreement.</p>
             </div>
-            <ContractForm onContractCreated={handleContractCreated} />
+            <ContractForm />
           </div>
         )}
 

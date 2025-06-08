@@ -7,8 +7,9 @@ import Dashboard from '../pages/Dashboard';
 import CreateCampaign from '../pages/CreateCampaign';
 import MatchedInfluencers from '../pages/MatchedInfluencers';
 import NegotiationChat from '../pages/NegotiationChat';
-import ContractManager from '../pages/ContractForm'; // New contract page
-import PaymentTest from '../components/PaymentTest'; // New payment test component
+import ContractForm from '../pages/ContractForm';
+import ContractsPage from '../pages/ContractsPage';
+import ContractSigningPage from '../pages/ContractSigningPage';
 import supabase from '../utils/supabase';
 
 // Protected Route Component
@@ -107,11 +108,10 @@ function AppContent() {
         <Route path="/auth" element={<Auth />} />
         
         {/* 🆕 NEW: Payment Test (Public - No auth needed) */}
-        <Route path="/payment-test" element={<PaymentTest />} />
         
         {/* Protected Routes */}
         <Route 
-          path="/dashboard" 
+          path="/" 
           element={
             <ProtectedRoute>
               <Dashboard />
@@ -127,7 +127,7 @@ function AppContent() {
           } 
         />
         <Route 
-          path="/match_influencers" 
+          path="/matched-influencers" 
           element={
             <ProtectedRoute>
               <MatchedInfluencers />
@@ -135,7 +135,7 @@ function AppContent() {
           } 
         />
         <Route 
-          path="/negotiation-chat/:campaign_id" 
+          path="/chat" 
           element={
             <ProtectedRoute>
               <NegotiationChat />
@@ -143,12 +143,12 @@ function AppContent() {
           } 
         />
         
-        {/* 🆕 NEW: Contract Management Routes */}
+        {/* Contract Routes */}
         <Route 
           path="/contracts" 
           element={
             <ProtectedRoute>
-              <ContractManager />
+              <ContractsPage />
             </ProtectedRoute>
           } 
         />
@@ -156,28 +156,20 @@ function AppContent() {
           path="/contracts/create" 
           element={
             <ProtectedRoute>
-              <ContractManager />
+              <ContractForm />
             </ProtectedRoute>
           } 
         />
         <Route 
-          path="/contracts/:id" 
+          path="/contracts/sign/:id" 
           element={
             <ProtectedRoute>
-              <ContractManager />
+              <ContractSigningPage />
             </ProtectedRoute>
           } 
         />
         
         {/* 🆕 NEW: Payment Test (Protected version) */}
-        <Route 
-          path="/test-payment" 
-          element={
-            <ProtectedRoute>
-              <PaymentTest />
-            </ProtectedRoute>
-          } 
-        />
         
         {/* Legacy routes for backward compatibility */}
         <Route 
@@ -191,10 +183,6 @@ function AppContent() {
         <Route 
           path="/app/match_influencers" 
           element={<Navigate to="/match_influencers" replace />}
-        />
-        <Route 
-          path="/app/contracts" 
-          element={<Navigate to="/contracts" replace />}
         />
         
         {/* Root route - redirect based on auth status */}
