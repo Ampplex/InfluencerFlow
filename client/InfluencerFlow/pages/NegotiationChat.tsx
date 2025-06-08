@@ -36,7 +36,7 @@ interface SessionInfo {
 type OutreachStatus = 'sent' | 'pending' | 'replied' | 'declined';
 
 const NegotiationChat: React.FC = () => {
-  const { campaign_id } = useParams<{ campaign_id: string }>();
+  const { campaign_id, email } = useParams<{ campaign_id: string, email: string }>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +46,12 @@ const NegotiationChat: React.FC = () => {
   const [showStartForm, setShowStartForm] = useState(true);
   const [activeSessions, setActiveSessions] = useState<SessionInfo[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  
+  const [agreedPrice, setAgreedPrice] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
+  const [influencer_id, setInfluencerID] = useState(null);
+
   // Form state
   const [budget, setBudget] = useState<number>(5000);
   const [campaignType, setCampaignType] = useState('social_media');
@@ -59,11 +64,16 @@ const NegotiationChat: React.FC = () => {
   // Use localhost for development - change this to your actual backend URL in production
   const API_BASE_URL = 'https://influencerflow-ai-services-1.onrender.com';
 
-  const [outreachStatus, setOutreachStatus] = useState<OutreachStatus>('sent');
+  const [outreachStatus, setOutreachStatus] = useState<OutreachStatus>('pending');
   const [influencerId, _setInfluencerId] = useState<string>('test_influencer'); // TODO: Replace with actual influencer id logic
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    if (isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   useEffect(() => {
@@ -75,26 +85,32 @@ const NegotiationChat: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchCampaign = async () => {
-      if (!campaign_id) return;
-      const { data, error } = await supabase
-        .from('campaign')
-        .select('*')
-        .eq('id', campaign_id)
-        .single();
-      if (error) {
-        console.error('Error fetching campaign:', error);
-      } else {
-        setCampaign(data);
-        // Optionally set budget, campaignType, duration from campaign
-        if (data) {
-          setBudget(data.budget || 5000);
-          setCampaignType(data.platforms?.split(',')[0] || 'social_media');
-          setDuration('2_weeks'); // You may map campaign duration fields if available
+    try {
+      const fetchCampaign = async () => {
+        if (!campaign_id) return;
+        const { data, error } = await supabase
+          .from('campaign')
+          .select('*')
+          .eq('id', campaign_id)
+          .single();
+        if (error) {
+          console.error('Error fetching campaign:', error);
+        } else {
+          setCampaign(data);
+          // Optionally set budget, campaignType, duration from campaign
+          if (data) {
+            setBudget(data.budget || 5000);
+            setCampaignType(data.platforms?.split(',')[0] || 'social_media');
+            // setDuration('2_weeks'); // You may map campaign duration fields if available
+          }
         }
-      }
-    };
-    fetchCampaign();
+      };
+      fetchCampaign();
+    } catch (error) {
+      console.error('Error fetching campaign:', error);
+      // Display Error Message
+      
+    }
   }, [campaign_id]);
 
   const loadActiveSessions = async () => {
@@ -111,27 +127,17 @@ const NegotiationChat: React.FC = () => {
 
   const startNegotiation = async () => {
     setIsLoading(true);
+    setGlobalError(null);
     try {
       const response = await fetch(`${API_BASE_URL}/start-negotiation`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          budget,
-          campaign_type: campaignType,
-          duration: duration,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget, campaign_type: campaignType }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to start negotiation');
-      }
-
+      if (!response.ok) throw new Error('Failed to start negotiation');
       const data = await response.json();
       setSessionId(data.session_id);
       setNegotiationState(data.state);
-      
       const botMessage: Message = {
         id: Date.now().toString(),
         type: 'bot',
@@ -139,19 +145,47 @@ const NegotiationChat: React.FC = () => {
         timestamp: new Date(),
         options: data.options,
       };
-
       setMessages([botMessage]);
       setShowStartForm(false);
+      console.log('Here: ',data)
       setIsNegotiationComplete(data.is_complete);
-      loadActiveSessions(); // Refresh sessions list
-      
+      loadActiveSessions();
     } catch (error) {
-      console.error('Error starting negotiation:', error);
-      alert('Failed to start negotiation. Please try again.');
+      setGlobalError('Failed to start negotiation. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const getInfluencerUsingEmail = async (email: string | undefined) => {
+    if (!campaign_id || !email) {
+      console.warn("Campaign ID or email is missing for getInfluencerUsingEmail.");
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('outreach')
+        .select('influencer_id')
+        .eq('campaign_id', Number(campaign_id))
+        .eq('influencer_email', email)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is 'no rows found'
+        console.error('Error fetching influencer ID:', error);
+        return null;
+      }
+      console.log('Look here: ',data?.influencer_id);
+      setInfluencerID(data ? data.influencer_id : null)
+      return data ? data.influencer_id : null;
+    } catch (err) {
+      console.error('Unexpected error in getInfluencerUsingEmail:', err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    getInfluencerUsingEmail(email);
+  }, []);
 
   // Helper to log CRM message as JSON array in content column
   const logCRMMessage = async (content: string, type: 'user' | 'bot') => {
@@ -188,12 +222,14 @@ const NegotiationChat: React.FC = () => {
         }
       } else {
         // No row exists, insert new
+        console.log('DEBUG influencer_id', influencerId)
         const { error: insertError } = await supabase
           .from('CRM_logs')
           .insert([
             {
               campaign_id: Number(campaign_id),
               content: [messageObj],
+              influencer_id: influencer_id,
             },
           ]);
         if (insertError) {
@@ -210,18 +246,18 @@ const NegotiationChat: React.FC = () => {
   // Fetch outreach status on campaign load
   useEffect(() => {
     const fetchOutreachStatus = async () => {
-      if (!campaign_id || !influencerId) return;
+      if (!campaign_id) return;
       const { data, error } = await supabase
         .from('outreach')
         .select('status')
-        .match({ campaign_id: Number(campaign_id), influencer_id: influencerId })
+        .match({ campaign_id: Number(campaign_id) })
         .single();
       if (!error && data) {
         setOutreachStatus(data.status);
       }
     };
     fetchOutreachStatus();
-  }, [campaign_id, influencerId]);
+  }, [campaign_id]);
 
   // Function to update campaign status in the campaign table
   const updateCampaignStatus = async (newStatus: string) => {
@@ -233,7 +269,7 @@ const NegotiationChat: React.FC = () => {
   };
 
   // Function to update outreach status
-  const updateOutreachStatus = async (newStatus: OutreachStatus) => {
+  const updateOutreachStatus = async (newStatus: OutreachStatus, agreedPrice?: number) => {
     if (!campaign_id || !influencerId) return;
     const updateData: any = {
       status: newStatus,
@@ -241,11 +277,14 @@ const NegotiationChat: React.FC = () => {
     };
     if (newStatus === 'replied') {
       updateData.replied_at = new Date().toISOString();
+      if (agreedPrice !== undefined && agreedPrice !== null) {
+        updateData.agreed_price = agreedPrice;
+      }
     }
     const { error } = await supabase
       .from('outreach')
       .update(updateData)
-      .match({ campaign_id: Number(campaign_id), influencer_id: influencerId });
+      .match({ campaign_id: Number(campaign_id), influencer_email: email});
     if (!error) setOutreachStatus(newStatus);
 
     // Update campaign table status as well
@@ -273,31 +312,45 @@ const NegotiationChat: React.FC = () => {
   const addMessage = async (msg: Message) => {
     setMessages(prev => [...prev, msg]);
     await logCRMMessage(msg.content, msg.type);
-    // Only update outreach status for user messages
+    // Only update outreach status for user messages, except 'replied'
     if (msg.type === 'user') {
       const detected = detectStatusFromMessage(msg.content);
-      if (detected) {
+      if (detected && detected !== 'replied') {
         await updateOutreachStatus(detected);
       }
     }
   };
 
-  // Update sendMessage and bot message logic to use addMessage
+  // Retry wrapper for async operations
+  const retryOperation = async (operation: () => Promise<any>, maxRetries = 2, delay = 1000) => {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (i < maxRetries - 1) await new Promise(res => setTimeout(res, delay));
+      }
+    }
+    throw lastError;
+  };
+
+  // Improved sendMessage with retry and error UI
   const sendMessage = async (message: string) => {
     if (!sessionId || isStreaming) return;
-
+    setLastUserMessage(message);
+    setIsStreaming(true);
+    setGlobalError(null);
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
       content: message,
       timestamp: new Date(),
     };
-
+    console.log('Review here: ',userMessage)
     await addMessage(userMessage);
     setInputValue('');
-    setIsStreaming(true);
-
-    // Create placeholder bot message for streaming
+    // Placeholder bot message
     const botMessageId = (Date.now() + 1).toString();
     const botMessage: Message = {
       id: botMessageId,
@@ -306,84 +359,78 @@ const NegotiationChat: React.FC = () => {
       timestamp: new Date(),
       isStreaming: true,
     };
-
     setMessages(prev => [...prev, botMessage]);
-
     try {
-      const response = await fetch(`${API_BASE_URL}/respond-stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          message: message,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send message');
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let streamedContent = '';
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const jsonStr = line.slice(6);
-              if (jsonStr.trim()) {
-                try {
-                  const data = JSON.parse(jsonStr);
-                  if (data.type === 'stream') {
-                    streamedContent += data.content;
-                    setMessages(prev => prev.map(msg => 
-                      msg.id === botMessageId 
-                        ? { ...msg, content: streamedContent }
-                        : msg
-                    ));
-                  } else if (data.type === 'complete') {
-                    setMessages(prev => prev.map(msg => 
-                      msg.id === botMessageId 
-                        ? { 
-                            ...msg, 
+      await retryOperation(async () => {
+        const response = await fetch(`${API_BASE_URL}/respond-stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId, message }),
+        });
+        if (!response.ok) throw new Error('Failed to send message');
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let streamedContent = '';
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const jsonStr = line.slice(6);
+                if (jsonStr.trim()) {
+                  try {
+                    const data = JSON.parse(jsonStr);
+                    if (data.type === 'stream') {
+                      streamedContent += data.content;
+                      setMessages(prev => prev.map(msg =>
+                        msg.id === botMessageId
+                          ? { ...msg, content: streamedContent }
+                          : msg
+                      ));
+                    } else if (data.type === 'complete') {
+                      setMessages(prev => prev.map(msg =>
+                        msg.id === botMessageId
+                          ? {
+                            ...msg,
                             content: streamedContent,
                             options: data.options,
                             isStreaming: false
                           }
-                        : msg
-                    ));
-                    setNegotiationState(data.state);
-                    setIsNegotiationComplete(data.is_complete);
-                    loadActiveSessions();
-                    // Log bot's final message
-                    await logCRMMessage(streamedContent, 'bot');
-                  } else if (data.type === 'error') {
-                    console.error('Streaming error:', data.content);
+                          : msg
+                      ));
+                      setAgreedPrice(data.state.agreed_price);
+                      setNegotiationState(data.state);
+                      setIsNegotiationComplete(data.is_complete);
+                      loadActiveSessions();
+                      await logCRMMessage(streamedContent, 'bot');
+                      if (data.is_complete && data.state.agreed_price) {
+                        await updateOutreachStatus('replied', data.state.agreed_price);
+                      }
+                      if (data.is_complete && data.state.agreed_price) {
+                        await updateCampaignStatus('in_review');
+                      }
+                    } else if (data.type === 'error') {
+                      throw new Error(data.content);
+                    }
+                  } catch (e) {
+                    throw new Error('Error parsing server response.');
                   }
-                } catch (e) {
-                  console.error('Error parsing JSON:', e);
                 }
               }
             }
           }
         }
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages(prev => prev.map(msg => 
-        msg.id === botMessageId 
-          ? { ...msg, content: 'Error: Failed to get response. Please try again.', isStreaming: false }
+      });
+    } catch (error: any) {
+      setMessages(prev => prev.map(msg =>
+        msg.id === botMessageId
+          ? { ...msg, content: `Error: ${error.message || 'Failed to get response. Please try again.'}`, isStreaming: false }
           : msg
       ));
+      setGlobalError(error.message || 'Failed to get response. Please try again.');
     } finally {
       setIsStreaming(false);
     }
@@ -454,10 +501,9 @@ const NegotiationChat: React.FC = () => {
     }
   };
 
-  // Add a function to mark campaign as completed
-  const markCampaignCompleted = async () => {
-    await updateCampaignStatus('completed');
-    alert('Campaign marked as completed!');
+  // Utility: Format timestamp
+  const formatTimestamp = (date: Date) => {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   if (showStartForm) {
@@ -604,6 +650,17 @@ const NegotiationChat: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-4xl mx-auto">
+        {globalError && (
+          <div className="bg-red-100 text-red-700 p-3 rounded mb-4 flex items-center justify-between">
+            <span>{globalError}</span>
+            <button onClick={() => setGlobalError(null)} className="ml-4 underline">Dismiss</button>
+          </div>
+        )}
+        {isLoading && (
+          <div className="flex items-center justify-center py-4">
+            <RefreshCw className="animate-spin mr-2" /> Loading...
+          </div>
+        )}
         {/* Header */}
         <div className="bg-white rounded-t-2xl shadow-xl p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
@@ -671,9 +728,18 @@ const NegotiationChat: React.FC = () => {
                         {message.isStreaming && (
                           <span className="inline-block w-2 h-4 bg-current ml-1 animate-pulse" />
                         )}
+                        {/* Retry button for failed bot messages */}
+                        {message.type === 'bot' && message.content.startsWith('Error:') && lastUserMessage && (
+                          <button
+                            onClick={() => sendMessage(lastUserMessage)}
+                            className="ml-2 text-blue-600 underline text-xs"
+                          >
+                            Retry
+                          </button>
+                        )}
                       </div>
                       <div className="text-xs opacity-75 mt-1">
-                        {message.timestamp.toLocaleTimeString()}
+                        {formatTimestamp(message.timestamp)}
                       </div>
                     </div>
                   </div>
@@ -702,7 +768,7 @@ const NegotiationChat: React.FC = () => {
 
         {/* Input Area */}
         {!isNegotiationComplete && (
-          <div className="bg-white rounded-b-2xl shadow-xl p-6">
+          <div className="sticky bottom-0 bg-white rounded-b-2xl shadow-xl p-6 z-10">
             <div className="flex space-x-4">
               <input
                 type="text"
@@ -735,18 +801,19 @@ const NegotiationChat: React.FC = () => {
                     Negotiation Complete!
                   </h3>
                   <p className="text-gray-600">
-                    {negotiationState?.agreed_price
+                    {negotiationState?.agreed_price && (campaign?.status === 'in_review' || campaign?.status === 'completed')
                       ? `Deal agreed at ${formatCurrency(negotiationState.agreed_price)}`
-                      : 'No agreement reached'}
+                      : (campaign?.status === 'failed' || campaign?.status === 'declined')
+                        ? 'No agreement reached'
+                        : (campaign?.status === 'in_review' && !negotiationState?.agreed_price)
+                          ? 'Agreement in review.'
+                          : 'Negotiation ended.'}
                   </p>
-                  {/* Mark as completed button */}
-                  {campaign?.status !== 'completed' && (
-                    <button
-                      onClick={markCampaignCompleted}
-                      className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                      Mark Campaign as Completed
-                    </button>
+                  {/* Show review message if in_review, else show nothing (no Mark as Completed button) */}
+                  {campaign?.status === 'in_review' && (
+                    <div className="mt-4 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg font-medium">
+                      Agreement in review. Awaiting brand action.
+                    </div>
                   )}
                 </div>
               </div>

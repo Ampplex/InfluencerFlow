@@ -64,10 +64,11 @@ interface OutreachRecord {
   brand_id: string;
   email_subject: string;
   email_body: string;
-  status: 'sent' | 'pending' | 'replied' | 'declined';
+  status: 'sent' | 'pending' | 'replied' | 'declined' | 'completed';
   sent_at: string;
   created_at: string;
   updated_at: string;
+  agreed_price?: string;
 }
 
 const Dashboard = () => {
@@ -186,6 +187,7 @@ const Dashboard = () => {
         // Don't throw error as outreach table might not exist yet
         setOutreachRecords([]);
       } else {
+        console.log('Fetched outreach records:', outreachData);
         setOutreachRecords(outreachData || []);
       }
     } catch (err) {
@@ -352,6 +354,7 @@ const Dashboard = () => {
       case 'completed': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'draft': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'paused': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'in_review': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -362,6 +365,7 @@ const Dashboard = () => {
       case 'sent': return 'bg-blue-100 text-blue-800';
       case 'replied': return 'bg-green-100 text-green-800';
       case 'declined': return 'bg-red-100 text-red-800';
+      case 'completed': return 'bg-green-100 text-green-800';
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -387,6 +391,12 @@ const Dashboard = () => {
           text: 'View Report',
           icon: '📋',
           color: 'bg-gray-600 hover:bg-gray-700 text-white'
+        };
+      case 'in_review':
+        return {
+          text: 'Review Offer',
+          icon: '📝',
+          color: 'bg-yellow-600 hover:bg-yellow-700 text-white'
         };
       default:
         return {
@@ -453,6 +463,58 @@ const Dashboard = () => {
     return activities
       .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
       .slice(0, 6);
+  };
+
+  // Handler to update campaign status (accept/deny offer)
+  const handleReviewAction = async (campaignId: number, action: 'accept' | 'deny', outreach?: OutreachRecord) => {
+    const newStatus = action === 'accept' ? 'completed' : 'declined';
+    
+    if (outreach) {
+      // Update the outreach record
+      const { error: outreachUpdateError } = await supabase
+        .from('outreach')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', outreach.id);
+
+      if (outreachUpdateError) {
+        console.error('Error updating outreach record:', outreachUpdateError);
+      } else {
+        console.log(`Outreach record ${outreach.id} updated to status: ${newStatus}`);
+      }
+
+      // If accepting the offer, update the campaign's final_price and status
+      if (action === 'accept' && outreach.agreed_price) {
+        const { error: campaignUpdateError } = await supabase
+          .from('campaign')
+          .update({ 
+            final_price: outreach.agreed_price,
+            status: 'completed', // Explicitly set campaign status to completed
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', campaignId);
+
+        if (campaignUpdateError) {
+          console.error('Error updating campaign final_price or status:', campaignUpdateError);
+        } else {
+          console.log(`Campaign ${campaignId} final_price updated to: ${outreach.agreed_price} and status to: completed`);
+        }
+      }
+    } else {
+      // Fallback: update campaign status (this path is for general campaign status updates, not individual outreach acceptance)
+      const { error: campaignFallbackError } = await supabase
+        .from('campaign')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', campaignId);
+      
+      if (campaignFallbackError) {
+        console.error('Error updating campaign status (fallback):', campaignFallbackError);
+      } else {
+        console.log(`Campaign ${campaignId} status updated to: ${newStatus} (fallback)`);
+      }
+    }
+    
+    await fetchCampaigns(currentBrand?.brand_id || '');
+    await fetchOutreachRecords(currentBrand?.brand_id || '');
   };
 
   const stats = calculateStats();
@@ -633,6 +695,8 @@ const Dashboard = () => {
                       ? campaign.matched_creators.reduce((sum, creator) => sum + (creator.followers || 0), 0)
                       : campaignOutreach.reduce((sum, record) => sum + (record.influencer_followers || 0), 0);
                     const actionButton = getActionButton(campaign.status);
+                    const campaignOutreachRecords = getCampaignOutreach(campaign.id);
+                    const hasAnyCompletedDealForCampaign = campaignOutreachRecords.some(o => o.status === 'completed');
 
                     return (
                       <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all">
@@ -703,7 +767,6 @@ const Dashboard = () => {
                         )}
 
                         <div className="flex justify-between items-center">
-                          {/* Only show report button if status is completed */}
                           {campaign.status === 'completed' ? (
                             <motion.button
                               onClick={() => handleShowReport(campaign)}
@@ -714,6 +777,49 @@ const Dashboard = () => {
                               <span>📋</span>
                               View Report
                             </motion.button>
+                          ) : campaign.status === 'draft' ? (
+                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium">
+                              Setup Required
+                            </div>
+                          ) : campaign.status === 'in_review' ? (
+                            hasAnyCompletedDealForCampaign ? (
+                              <div className="flex items-center justify-center bg-green-50 rounded-lg p-3 text-sm font-semibold text-green-800">
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Deal Accepted for Campaign!
+                              </div>
+                            ) : (
+                              <div className="mb-4">
+                                <p className="text-xs text-gray-500 mb-2">Agreements to Review:</p>
+                                {campaignOutreachRecords.filter((o: OutreachRecord) => o.status === 'replied' && o.agreed_price != null).length === 0 ? (
+                                  <div className="text-sm text-gray-500">No agreements to review yet.</div>
+                                ) : (
+                                  campaignOutreachRecords.filter((o: OutreachRecord) => o.status === 'replied' && o.agreed_price != null).map((outreach: OutreachRecord) => (
+                                    <div key={outreach.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3 mb-2">
+                                      <div>
+                                        <span className="font-semibold">{outreach.influencer_username}</span>
+                                        <span className="ml-2 text-blue-700 font-medium">Agreed Price: {formatCurrency(Number(outreach.agreed_price))}</span>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => handleReviewAction(campaign.id, 'accept', outreach)}
+                                          className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs font-medium"
+                                        >
+                                          Accept
+                                        </button>
+                                        <button
+                                          onClick={() => handleReviewAction(campaign.id, 'deny', outreach)}
+                                          className="px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-medium"
+                                        >
+                                          Deny
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )
                           ) : (
                             <motion.button
                               onClick={() => handleCampaignAction(campaign)}
@@ -724,11 +830,6 @@ const Dashboard = () => {
                               <span>{actionButton.icon}</span>
                               {actionButton.text}
                             </motion.button>
-                          )}
-                          {campaign.status === 'draft' && (
-                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium">
-                              Setup Required
-                            </div>
                           )}
                         </div>
                       </div>
