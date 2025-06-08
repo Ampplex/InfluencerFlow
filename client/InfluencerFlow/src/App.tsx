@@ -111,7 +111,7 @@ function AppContent() {
         
         {/* Protected Routes */}
         <Route 
-          path="/" 
+          path="/dashboard" 
           element={
             <ProtectedRoute>
               <Dashboard />

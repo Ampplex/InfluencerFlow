@@ -105,18 +105,20 @@ function MatchedInfluencers() {
         sent_at: new Date().toISOString(),
       }));
 
+      console.log('Attempting to save outreach records:', outreachRecords);
       const { data, error } = await supabase
         .from('outreach')
         .insert(outreachRecords)
         .select();
 
       if (error) {
-        console.error('Error saving outreach records:', error);
+        console.error('Error saving outreach records to Supabase:', error);
         throw error;
+      } else {
+        console.log('Outreach records successfully saved to Supabase:', data);
       }
 
-      console.log('Outreach records saved:', data);
-
+      console.log('Checking campaign ID for update:', campaignId);
       // Update campaign status to 'active' if it was 'draft'
       if (campaignId) {
         const { error: campaignError } = await supabase
@@ -128,7 +130,9 @@ function MatchedInfluencers() {
           .eq('id', campaignId);
 
         if (campaignError) {
-          console.error('Error updating campaign status:', campaignError);
+          console.error('Error updating campaign status in Supabase:', campaignError);
+        } else {
+          console.log(`Campaign ${campaignId} status updated to 'active' in Supabase.`);
         }
       }
 
@@ -250,7 +254,7 @@ function MatchedInfluencers() {
     if (campaignId) {
       setCampaignInfo(`Campaign ID: ${campaignId}`);
     }
-    
+    console.log("MatchedInfluencers - Received state:", { campaignId, query, limit });
     getMatchedInfluencers()
       .then((data) => {
         if (data && data.influencers && data.influencers.length > 0) {

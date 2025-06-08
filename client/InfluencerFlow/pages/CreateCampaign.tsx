@@ -202,7 +202,7 @@ const CreateCampaign = () => {
         brand_name: formData.brand_name,
         voice_enabled: formData.voice_enabled,
         status: 'draft',
-        matched_creators: [],
+        // matched_creators: [],
         report_id: crypto.randomUUID(),
       };
       
@@ -221,7 +221,7 @@ const CreateCampaign = () => {
         
         // Redirect after success - FIXED PATH
         setTimeout(() => {
-          navigate('/match_influencers', {
+          navigate('/matched-influencers', {
             state: {
               campaignId: data[0].id,
               query: formData.campaign_name + ' ' + formData.description,
