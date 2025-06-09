@@ -1,21 +1,32 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import supabase from '../utils/supabase';
+import { useNavigate, useLocation } from 'react-router-dom';
+import supabase from '../../utils/supabase';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../../redux/store';
+import { setUserType } from '../../redux/userType/userTypeSlice';
 
-interface AuthProps {
-}
-
-const InfluencerFlowAuth: React.FC<AuthProps> = () => {
+const InfluencerFlowAuth: React.FC = () => {
+  console.log('InfluencerAuth component is rendering.');
   const navigate = useNavigate();
+  const location = useLocation();
   const [message, setMessage] = useState<string>('');
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSignUp, setIsSignUp] = useState<boolean>(false);
+  const { user_type, mode } = (location.state || {}) as { user_type?: string, mode?: 'signup' | 'signin' };
+  const [isSignUp, setIsSignUp] = useState<boolean>(mode === 'signup');
+  const dispatch = useDispatch<AppDispatch>();
 
   const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'google' });
+    dispatch(setUserType("influencer"));
+    const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+    if (error) {
+      console.error('Error during Google OAuth sign-in:', error);
+      // Optionally, set a message to the user about the error
+    } else {
+      console.log('Google OAuth initiated. The auth state change listener will handle the session.');
+    }
   };
 
   const handleSignOut = async () => {
@@ -38,23 +49,18 @@ const InfluencerFlowAuth: React.FC<AuthProps> = () => {
   const checkAuthStatus = async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
+      console.log('No active session found.');
       setMessage(isSignUp ? 'Ready to join thousands of marketers?' : 'Please sign in to access your dashboard.');
       setIsLoggedIn(false);
       setIsLoading(false);
       return;
     }
-    console.clear();
-    console.log('Protected data fetched successfully.');
-    console.log('Session:', data.session.user.user_metadata);
+
     setUserData(data.session.user.user_metadata);
     setMessage('Welcome back to InfluencerFlow!');
     setIsLoggedIn(true);
     setIsLoading(false);
     
-    // Redirect to dashboard after successful login
-    setTimeout(() => {
-      navigate('/create-campaign'); // or wherever your main dashboard is
-    }, 2000); // 2 second delay to show the welcome message
   };
 
   useEffect(() => {
@@ -62,16 +68,13 @@ const InfluencerFlowAuth: React.FC<AuthProps> = () => {
 
     // Listen for auth state changes (for OAuth callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session);
       if (event === 'SIGNED_IN' && session) {
+        console.log('Session data (onAuthStateChange):', session);
         setUserData(session.user.user_metadata);
         setMessage('Welcome to InfluencerFlow!');
         setIsLoggedIn(true);
         setIsLoading(false);
-        
-        // Redirect to dashboard after successful login
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 2000);
       }
     });
 
@@ -118,7 +121,7 @@ const InfluencerFlowAuth: React.FC<AuthProps> = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <span className="text-xl font-bold text-gray-900">InfluencerFlow</span>
+              <span className="text-xl font-bold text-gray-900">InfluencerFlow - Influencer</span>
             </div>
 
             {/* Welcome Text */}
@@ -196,7 +199,9 @@ const InfluencerFlowAuth: React.FC<AuthProps> = () => {
                 <>
                   {/* Google Sign In/Up Button */}
                   <motion.button
-                    onClick={handleLogin}
+                    onClick={() => {
+                      handleLogin();
+                    }}
                     disabled={isLoading}
                     className="w-full bg-gray-900 hover:bg-gray-800 border border-gray-300 hover:border-gray-400 text-white py-4 px-6 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
                     whileHover={{ scale: 1.01 }}
