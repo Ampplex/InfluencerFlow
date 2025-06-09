@@ -259,7 +259,7 @@ const Dashboard = () => {
             throw error;
           }
         }
-        setReportLogs(Array.isArray(data?.content) ? data.content : []);
+      setReportLogs(Array.isArray(data?.content) ? data.content : []);
       } else {
         // General campaign report: fetch all CRM logs for the campaign
         const { data, error } = await query; // No .single() here
