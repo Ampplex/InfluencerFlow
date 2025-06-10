@@ -41,8 +41,9 @@ function MatchedInfluencers() {
   
   // Get campaign data from navigation state
   const campaignId = location.state?.campaignId;
-  const query = location.state?.query || "tech lifestyle creators";
+  const query = location.state?.query;
   const limit = location.state?.limit || 10;
+  const campaign_description = location.state.campaign_description;
   
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +54,7 @@ function MatchedInfluencers() {
 
   // Real API call instead of mock data
   const getMatchedInfluencers = async () => {
-    const url = `https://influencerflow-ai-services.onrender.com/influencers/query`;
+    const url = `https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/query`;
     try {
       setLoading(true);
       setError(null);
@@ -192,7 +193,7 @@ function MatchedInfluencers() {
       console.log(`Brand Name: ${brand_name} and Brand Description: ${brand_description}`);
       
       // Make actual API call to your outreach endpoint
-      const response = await fetch('https://influencerflow-ai-services.onrender.com/influencers/outreachEmailGenerator', {
+      const response = await fetch('https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/outreachEmailGenerator', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -202,6 +203,7 @@ function MatchedInfluencers() {
           brand_name: brand_name,
           brand_description: brand_description,
           campaign_id: campaignId.toString(),
+          campaign_description: campaign_description
         })
       });
       

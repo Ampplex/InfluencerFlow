@@ -71,11 +71,6 @@ const BrandAuth: React.FC<AuthProps> = () => {
         setMessage('Welcome to InfluencerFlow!');
         setIsLoggedIn(true);
         setIsLoading(false);
-        
-        // Redirect to dashboard after successful login
-        // setTimeout(() => {
-        //   navigate('/dashboard');
-        // }, 2000);
       }
     });
 
