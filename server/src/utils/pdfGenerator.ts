@@ -1,7 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { ContractTemplate } from '../types/contract';
 
-export async function generatePDF(data: ContractTemplate & { signature_url?: string }): Promise<Buffer> {
+export async function generatePDF(data: ContractTemplate & { signature_url?: string; signature_buffer?: Buffer }): Promise<Buffer> {
     // Create a new PDF document
     const doc = await PDFDocument.create();
     const page = doc.addPage();
@@ -55,17 +55,29 @@ export async function generatePDF(data: ContractTemplate & { signature_url?: str
     }
 
     // Add signature section
-    if (data.signature_url) {
-        // If we have a signature, embed it
+    if (data.signature_buffer) {
+        console.log('pdfGenerator: Embedding signature from buffer.');
+        const image = await doc.embedPng(data.signature_buffer);
+        
+        page.drawImage(image, {
+            x: width - 200,
+            y: 85,
+            width: 150,
+            height: 50,
+        });
+    } else if (data.signature_url) {
+        console.log('pdfGenerator: Embedding signature from URL (fallback).');
         const signatureImage = await fetch(data.signature_url).then(res => res.arrayBuffer());
         const image = await doc.embedPng(signatureImage);
         
         page.drawImage(image, {
             x: width - 200,
-            y: 100,
+            y: 85,
             width: 150,
             height: 50,
         });
+    } else {
+        console.log('pdfGenerator: No signature found to embed.');
     }
 
     // Add signature line
@@ -76,7 +88,14 @@ export async function generatePDF(data: ContractTemplate & { signature_url?: str
         color: rgb(0, 0, 0),
     });
 
-    writeText('Signature', true);
+    // Add signature text below the line
+    page.drawText('Signature', {
+        x: width - 200,
+        y: 65,
+        size: 11,
+        font: boldFont,
+        color: rgb(0, 0, 0),
+    });
     
     // Serialize the PDF to bytes
     const pdfBytes = await doc.save();

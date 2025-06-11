@@ -18,15 +18,15 @@ export const contractService = {
       },
       body: JSON.stringify(data)
     });
-    
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Failed to preview contract' }));
       throw new Error(error.error || 'Failed to preview contract');
     }
-    
+
     return response.blob();
   },
-  
+
   generateContract: async (data: ContractTemplate & { influencer_id: string; brand_id: string }): Promise<Contract> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -41,43 +41,41 @@ export const contractService = {
       },
       body: JSON.stringify(data)
     });
-    
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Failed to generate contract' }));
       throw new Error(error.error || 'Failed to generate contract');
     }
-    
+
     return response.json();
   },
-  
+
   signContract: async (contractId: string, signatureFile: File, userId: string): Promise<Contract> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       throw new Error('No authenticated user');
     }
-
     const formData = new FormData();
     formData.append('contract_id', contractId);
-    formData.append('signature_file', signatureFile);
     formData.append('user_id', userId);
-    formData.append('mime_type', signatureFile.type);
-    
-    const response = await fetch(`${API_BASE_URL}/api/contracts/sign`, {
+    formData.append('signature_file', signatureFile);
+
+    const response = await fetch('http://localhost:3000/api/contracts/sign', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`
       },
       body: formData
     });
-    
+
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to sign contract' }));
-      throw new Error(error.error || 'Failed to sign contract');
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to sign contract');
     }
-    
+
     return response.json();
   },
-  
+
   getContract: async (id: string): Promise<Contract> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -89,15 +87,15 @@ export const contractService = {
         'Authorization': `Bearer ${session.access_token}`
       }
     });
-    
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Failed to fetch contract' }));
       throw new Error(error.error || 'Failed to fetch contract');
     }
-    
+
     return response.json();
   },
-  
+
   listContracts: async (userId: string, role: 'influencer' | 'brand'): Promise<Contract[]> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -109,12 +107,12 @@ export const contractService = {
         'Authorization': `Bearer ${session.access_token}`
       }
     });
-    
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Failed to fetch contracts' }));
       throw new Error(error.error || 'Failed to fetch contracts');
     }
-    
+
     return response.json();
   },
 

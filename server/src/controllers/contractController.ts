@@ -5,6 +5,14 @@ import { generatePDF } from '../utils/pdfGenerator';
 import { validateSignatureFile } from '../utils/fileValidation';
 import { ContractError, StorageError, handleError } from '../types/errors';
 import { v4 as uuidv4 } from 'uuid';
+import multer from 'multer';
+
+// Extend the Request interface to include file
+declare module 'express-serve-static-core' {
+  interface Request {
+    file?: Express.Multer.File;
+  }
+}
 
 const supabase = createClient(
     process.env.SUPABASE_URL || "https://eepxrnqcefpvzxqkpjaw.supabase.co",
@@ -16,14 +24,14 @@ export class ContractController {
     async previewContract(req: Request, res: Response) {
         try {
             const contractData: ContractTemplate = req.body;
-            
+
             if (!contractData.influencer_name || !contractData.brand_name) {
                 throw new ContractError('Missing required contract information');
             }
 
             // Generate preview PDF without saving
             const pdfBuffer = await generatePDF(contractData);
-            
+
             // Send PDF directly in response
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'inline; filename=contract_preview.pdf');
@@ -123,25 +131,32 @@ export class ContractController {
         }
     }
 
-    // Sign a contract
+    // Updated signContract method in ContractController
     async signContract(req: Request, res: Response) {
         try {
-            const { contract_id, signature_file, user_id, mime_type }: SignContractRequest & { mime_type: string } = req.body;
+            console.log('Request body:', req.body);
+            console.log('Request file:', req.file);
+            console.log('Request content-type:', req.get('content-type'));
+
+            // Extract data from multer-parsed request
+            const { contract_id, user_id } = req.body;
             const authHeader = req.headers.authorization;
 
-            if (!contract_id || !signature_file || !user_id) {
-                throw new ContractError('Missing required signature information');
+            // Validation
+            if (!contract_id || !user_id) {
+                throw new ContractError('Missing required signature information: contract_id or user_id');
+            }
+
+            if (!req.file) {
+                throw new ContractError('Missing signature file');
             }
 
             if (!authHeader) {
                 throw new ContractError('No authorization header');
             }
 
-            // Set auth context for Supabase client
-            const supabaseWithAuth = supabase.auth.setSession({
-                access_token: authHeader.replace('Bearer ', ''),
-                refresh_token: ''
-            });
+            const signature_file = req.file.buffer;
+            const mime_type = req.file.mimetype;
 
             // Validate signature file
             validateSignatureFile(signature_file, mime_type);
@@ -179,11 +194,18 @@ export class ContractController {
                 throw new ContractError('Contract has already been signed');
             }
 
-            // Generate final PDF with signature
-            const finalPdfBuffer = await generatePDF({
-                ...contract.contract_data,
-                signature_url: signatureUrl
-            });
+            let finalPdfBuffer;
+            try {
+                finalPdfBuffer = await generatePDF({
+                    ...contract.contract_data,
+                    signature_url: signatureUrl,
+                    signature_buffer: signature_file
+                });
+                console.log('Sign Contract - Final PDF buffer generated. Length:', finalPdfBuffer.length);
+            } catch (pdfGenErr) {
+                console.error('Error generating final PDF: Name:', (pdfGenErr as Error).name, 'Message:', (pdfGenErr as Error).message, 'Stack:', (pdfGenErr as Error).stack);
+                throw new ContractError('Failed to generate final PDF: ' + (pdfGenErr as Error).message);
+            }
 
             // Upload final signed PDF
             const { data: finalPdfData, error: finalPdfError } = await supabase.storage
