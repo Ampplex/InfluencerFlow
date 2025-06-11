@@ -8,6 +8,10 @@
       "src": "/[^.]+",
       "dest": "/",
       "status": 200
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ],
   "functions": {
