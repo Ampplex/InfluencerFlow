@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import supabase from '../utils/supabase';
 import { contractService } from '../services/contractService';
 import { ContractTemplate } from '../types/contract';
+import { contractIntegrationService } from '../services/contractIntegrationService';
 
 interface Activity {
   id: string;
@@ -87,6 +88,11 @@ const Dashboard = () => {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportCampaign, setReportCampaign] = useState<any>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [showAgreementsModal, setShowAgreementsModal] = useState(false);
+  const [isGeneratingContract, setIsGeneratingContract] = useState(false);
+  const [contractPreviewUrl, setContractPreviewUrl] = useState<string | null>(null);
+  const [showContractPreview, setShowContractPreview] = useState(false);
 
   // Get current user and brand data
   useEffect(() => {
@@ -218,12 +224,25 @@ const Dashboard = () => {
           },
         });
         break;
+      case 'in_review':
+        // Show outreach with agreed price that can be converted to contracts
+        const campaignOutreach = getCampaignOutreach(campaign.id);
+        const agreedOutreach = campaignOutreach.filter(o => o.status === 'replied' && o.agreed_price);
+        
+        if (agreedOutreach.length > 0) {
+          // We have agreed prices, allow contract generation
+          setSelectedCampaign(campaign);
+          setShowAgreementsModal(true);
+        } else {
+          alert(`No agreements with agreed prices found for campaign "${campaign.campaign_name}".`);
+        }
+        break;
       case 'active':
         // View campaign details/analytics
-        const campaignOutreach = getCampaignOutreach(campaign.id);
-        if (campaignOutreach.length > 0) {
-          const outreachSummary = `Campaign has ${campaignOutreach.length} outreach activities:\n` +
-            campaignOutreach.map(o => `• ${o.influencer_username} (${o.status})`).join('\n');
+        const campaignOutreachActive = getCampaignOutreach(campaign.id);
+        if (campaignOutreachActive.length > 0) {
+          const outreachSummary = `Campaign has ${campaignOutreachActive.length} outreach activities:\n` +
+            campaignOutreachActive.map(o => `• ${o.influencer_username} (${o.status})`).join('\n');
           alert(`Campaign "${campaign.campaign_name}" is active.\n\n${outreachSummary}\n\nFull analytics coming soon!`);
         } else {
           alert(`Campaign "${campaign.campaign_name}" is currently active. Analytics coming soon!`);
@@ -380,15 +399,19 @@ const Dashboard = () => {
     return Math.floor((elapsed / totalDuration) * 100);
   };
 
-  // Get status color
+  // Get status color based on campaign status
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-200';
-      case 'completed': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'draft': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'paused': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'in_review': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'active':
+        return 'border-green-200 bg-green-50 text-green-800';
+      case 'draft':
+        return 'border-gray-200 bg-gray-50 text-gray-800';
+      case 'completed':
+        return 'border-blue-200 bg-blue-50 text-blue-800';
+      case 'in_review':
+        return 'border-yellow-200 bg-yellow-50 text-yellow-800';
+      default:
+        return 'border-gray-200 bg-gray-50 text-gray-800';
     }
   };
 
@@ -404,13 +427,13 @@ const Dashboard = () => {
     }
   };
 
-  // Get action button text and style based on status
+  // Get action button configuration based on campaign status
   const getActionButton = (status: string) => {
     switch (status.toLowerCase()) {
       case 'draft':
         return {
           text: 'Continue Setup',
-          icon: '🚀',
+          icon: '🔍',
           color: 'bg-blue-600 hover:bg-blue-700 text-white'
         };
       case 'active':
@@ -616,6 +639,49 @@ const Dashboard = () => {
     
     await fetchCampaigns(currentBrand?.brand_id || '');
     await fetchOutreachRecords(currentBrand?.brand_id || '');
+  };
+
+  // Handle contract preview
+  const handleContractPreview = async (outreachId: string) => {
+    try {
+      setIsGeneratingContract(true);
+      
+      const pdfBlob = await contractIntegrationService.generateContractPreview(outreachId);
+      
+      const url = URL.createObjectURL(pdfBlob);
+      setContractPreviewUrl(url);
+      setShowContractPreview(true);
+    } catch (error: any) {
+      alert(`Failed to preview contract: ${error.message}`);
+    } finally {
+      setIsGeneratingContract(false);
+    }
+  };
+
+  // Handle contract generation
+  const handleGenerateContract = async (outreachId: string) => {
+    try {
+      setIsGeneratingContract(true);
+      
+      const contractId = await contractIntegrationService.generateContract(outreachId);
+      
+      // Close the modal and refresh data
+      setShowAgreementsModal(false);
+      
+      // Refresh data by calling the individual fetch methods
+      if (currentBrand?.brand_id) {
+        await fetchCampaigns(currentBrand.brand_id);
+        await fetchContracts(currentBrand.brand_id);
+        await fetchOutreachRecords(currentBrand.brand_id);
+      }
+      
+      // Show success message
+      alert(`Contract successfully generated! You can view it in the Contracts section.`);
+    } catch (error: any) {
+      alert(`Failed to generate contract: ${error.message}`);
+    } finally {
+      setIsGeneratingContract(false);
+    }
   };
 
   const stats = calculateStats();
@@ -1079,6 +1145,112 @@ const Dashboard = () => {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Agreements Modal */}
+      {showAgreementsModal && selectedCampaign && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Review Agreements</h2>
+              <button 
+                onClick={() => setShowAgreementsModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <p className="mb-4 text-gray-600">
+              The following influencers have agreed to work on your campaign. Review the agreed prices and generate contracts.
+            </p>
+
+            <div className="mb-6 border rounded-lg divide-y">
+              {getCampaignOutreach(selectedCampaign.id)
+                .filter(o => o.status === 'replied' && o.agreed_price)
+                .map(outreach => (
+                  <div key={outreach.id} className="p-4 flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold">{outreach.influencer_username}</div>
+                      <div className="text-sm text-gray-600">{outreach.influencer_email}</div>
+                      <div className="mt-1 font-bold text-green-700">
+                        Agreed Price: {formatCurrency(Number(outreach.agreed_price))}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleContractPreview(outreach.id)}
+                        disabled={isGeneratingContract}
+                        className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 transition-colors disabled:opacity-50"
+                      >
+                        Preview Contract
+                      </button>
+                      <button
+                        onClick={() => handleGenerateContract(outreach.id)}
+                        disabled={isGeneratingContract}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        Generate Contract
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowAgreementsModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Contract Preview Modal */}
+      {showContractPreview && contractPreviewUrl && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Contract Preview</h2>
+              <button
+                onClick={() => {
+                  setShowContractPreview(false);
+                  URL.revokeObjectURL(contractPreviewUrl);
+                  setContractPreviewUrl(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex-1 p-4">
+              <iframe
+                src={contractPreviewUrl}
+                className="w-full h-full rounded border border-gray-200"
+                title="Contract Preview"
+              />
+            </div>
+
+            <div className="p-4 border-t flex justify-end gap-4">
+              <button
+                onClick={() => {
+                  setShowContractPreview(false);
+                  URL.revokeObjectURL(contractPreviewUrl);
+                  setContractPreviewUrl(null);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
