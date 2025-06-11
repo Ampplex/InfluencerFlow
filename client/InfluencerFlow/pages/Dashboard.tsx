@@ -595,7 +595,8 @@ const Dashboard = () => {
             // 6. Show success message with option to view contract
             const viewContract = confirm(`Contract generated successfully! Would you like to view the contract now?`);
             if (viewContract) {
-              navigate(`/contracts/${contract.id}`);
+              // navigate(`/contracts/${contract.id}`);
+              navigate(`/contracts`);
             }
             
             // 7. Refresh contracts list
@@ -676,7 +677,7 @@ const Dashboard = () => {
       }
       
       // Show success message
-      alert(`Contract successfully generated! You can view it in the Contracts section.`);
+      const resp = alert(`Contract successfully generated! You can view it in the Contracts section.`);
     } catch (error: any) {
       alert(`Failed to generate contract: ${error.message}`);
     } finally {
