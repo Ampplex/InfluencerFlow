@@ -225,6 +225,7 @@ const CreateCampaign = () => {
             state: {
               campaignId: data[0].id,
               query: formData.campaign_name + ' ' + formData.description,
+              campaign_description: formData.description,
               limit: 10,
             },
           });
