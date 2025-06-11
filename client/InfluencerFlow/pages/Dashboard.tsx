@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../utils/supabase';
+import { contractService } from '../services/contractService';
+import { ContractTemplate } from '../types/contract';
 
 interface Activity {
   id: string;
@@ -259,7 +261,7 @@ const Dashboard = () => {
             throw error;
           }
         }
-      setReportLogs(Array.isArray(data?.content) ? data.content : []);
+        setReportLogs(Array.isArray(data?.content) ? data.content : []);
       } else {
         // General campaign report: fetch all CRM logs for the campaign
         const { data, error } = await query; // No .single() here
@@ -514,20 +516,88 @@ const Dashboard = () => {
       }
 
       // If accepting the offer, update the campaign's final_price and status
+      // AND generate a contract
       if (action === 'accept' && outreach.agreed_price) {
-        const { error: campaignUpdateError } = await supabase
-          .from('campaign')
-          .update({ 
-            final_price: outreach.agreed_price,
-            status: 'completed', // Explicitly set campaign status to completed
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', campaignId);
+        try {
+          // 1. Fetch the campaign details to get necessary contract data
+          const { data: campaignDetails, error: campaignDetailsError } = await supabase
+            .from('campaign')
+            .select('*')
+            .eq('id', campaignId)
+            .single();
+            
+          if (campaignDetailsError) throw campaignDetailsError;
 
-        if (campaignUpdateError) {
-          console.error('Error updating campaign final_price or status:', campaignUpdateError);
-        } else {
-          console.log(`Campaign ${campaignId} final_price updated to: ${outreach.agreed_price} and status to: completed`);
+          // 2. Get influencer name from outreach record
+          const influencerName = outreach.influencer_username;
+          
+          // 3. Prepare contract template data
+          const contractTemplateData: ContractTemplate = {
+            influencer_name: influencerName,
+            brand_name: currentBrand?.brand_name || campaignDetails.brand_name,
+            rate: Number(outreach.agreed_price),
+            timeline: `${campaignDetails.start_date} to ${campaignDetails.end_date}`,
+            deliverables: campaignDetails.description || 'As per campaign requirements',
+            payment_terms: 'Net 30 days after content approval',
+            special_requirements: `Platform: ${campaignDetails.platforms || 'All platforms'}`
+          };
+          
+          // 4. Generate the contract
+          const contractData = {
+            ...contractTemplateData,
+            influencer_id: outreach.influencer_id, 
+            brand_id: outreach.brand_id
+          };
+          
+          console.log('Generating contract with data:', contractData);
+          const contract = await contractService.generateContract(contractData);
+          console.log('Contract generated:', contract);
+
+          // 5. Update the campaign with the contract ID
+          const { error: campaignUpdateError } = await supabase
+            .from('campaign')
+            .update({ 
+              final_price: outreach.agreed_price,
+              status: 'completed', // Explicitly set campaign status to completed
+              updated_at: new Date().toISOString(),
+              contract_id: contract.id // Link the contract to the campaign
+            })
+            .eq('id', campaignId);
+
+          if (campaignUpdateError) {
+            console.error('Error updating campaign with contract:', campaignUpdateError);
+          } else {
+            console.log(`Campaign ${campaignId} updated with contract ID: ${contract.id}`);
+            
+            // 6. Show success message with option to view contract
+            const viewContract = confirm(`Contract generated successfully! Would you like to view the contract now?`);
+            if (viewContract) {
+              navigate(`/contracts/${contract.id}`);
+            }
+            
+            // 7. Refresh contracts list
+            await fetchContracts(currentBrand?.brand_id || '');
+          }
+        } catch (error: any) {
+          console.error('Error generating contract:', error);
+          
+          // Still update the campaign status even if contract generation fails
+          const { error: campaignUpdateError } = await supabase
+            .from('campaign')
+            .update({ 
+              final_price: outreach.agreed_price,
+              status: 'completed', 
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', campaignId);
+            
+          if (campaignUpdateError) {
+            console.error('Error updating campaign final_price or status:', campaignUpdateError);
+          }
+          
+          // Show detailed error message
+          const errorMsg = error.message || 'Unknown error';
+          alert(`Deal accepted, but there was an error generating the contract: ${errorMsg}. You can try creating the contract manually later.`);
         }
       }
     } else {
