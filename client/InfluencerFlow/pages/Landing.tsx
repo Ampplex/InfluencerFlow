@@ -730,7 +730,7 @@ const InfluencerFlowLanding = () => {
               <span className="text-xl font-bold text-foreground">InfluencerFlow</span>
             </div>
             <div className="text-sm text-muted-foreground">
-              © 2024 InfluencerFlow by Opraahfx. All rights reserved.
+              © 2025 InfluencerFlow by Opraahfx. All rights reserved.
             </div>
           </div>
         </div>
