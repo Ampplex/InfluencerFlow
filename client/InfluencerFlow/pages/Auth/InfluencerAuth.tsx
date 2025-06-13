@@ -19,13 +19,56 @@ const InfluencerFlowAuth: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
 
   const handleLogin = async () => {
+    console.log("=== Starting handleLogin in InfluencerAuth ===");
+    console.log("Current location:", window.location.href);
+    
+    // Clear any previous auth state from Supabase
+    await supabase.auth.signOut();
+    console.log("Cleared previous auth state");
+    
     dispatch(setUserType("influencer"));
-    const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
-    if (error) {
-      console.error('Error during Google OAuth sign-in:', error);
-      // Optionally, set a message to the user about the error
-    } else {
-      console.log('Google OAuth initiated. The auth state change listener will handle the session.');
+    console.log("Dispatched user type to Redux:", "influencer");
+    
+    // Store user type in multiple persistent locations
+    sessionStorage.setItem('user_type', 'influencer');
+    localStorage.setItem('user_type', 'influencer');
+    console.log("Stored user_type in sessionStorage and localStorage");
+    
+    // Include a timestamp to debug the flow
+    const timestamp = new Date().getTime();
+    
+    // Use document.location.origin to ensure we get the correct origin
+    const redirectUrl = new URL(document.location.origin + '/dashboard');
+    redirectUrl.searchParams.append('user_type', 'influencer');
+    redirectUrl.searchParams.append('auth_ts', timestamp.toString());
+    
+    console.log("Redirect URL after OAuth:", redirectUrl.toString());
+    
+    // Set cookie as another fallback method
+    document.cookie = `user_type=influencer; path=/; max-age=3600`;
+    document.cookie = `auth_ts=${timestamp}; path=/; max-age=3600`;
+    console.log("Set cookies for user_type and auth_ts");
+    
+    try {
+      console.log("Starting OAuth with Google...");
+      const { data, error } = await supabase.auth.signInWithOAuth({ 
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl.toString(),
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account', // Force account selection to avoid automatic login with cached credentials
+          }
+        }
+      });
+      
+      if (error) {
+        console.error("OAuth initiation error:", error);
+      } else {
+        console.log("OAuth initiation successful, data:", data);
+      }
+    } catch (err) {
+      console.error("Exception during OAuth:", err);
     }
   };
 
@@ -87,6 +130,76 @@ const InfluencerFlowAuth: React.FC = () => {
       setMessage(isSignUp ? 'Ready to join thousands of marketers?' : 'Please sign in to access your dashboard.');
     }
   }, [isSignUp, isLoggedIn]);
+  
+  // Handle redirect after login
+  useEffect(() => {
+    if (isLoggedIn && userData) {
+      console.log("User is logged in, preparing to redirect...");
+      
+      // Check if the profile needs setup
+      const checkProfileNeeded = async () => {
+        try {
+          const { data } = await supabase.auth.getSession();
+          const userId = data.session?.user?.id;
+          
+          if (userId) {
+            console.log("Checking if profile setup is needed for user:", userId);
+            
+            // Create headers for direct API call
+            const headers = {
+              'Content-Type': 'application/json',
+              'Accept': '*/*',
+              'prefer': 'return=representation',
+              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlcHhybnFjZWZwdnp4cWtwamF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjU2ODM5NDgsImV4cCI6MjA0MTI1OTk0OH0.cs_yQnvzrK-8CRYyvlbzfbhZhIqdC3X9fO-UugRCGuI',
+              'Authorization': `Bearer ${data.session?.access_token}`
+            };
+            
+            try {
+              // Make direct fetch call to avoid 406 errors
+              const response = await fetch(
+                `https://eepxrnqcefpvzxqkpjaw.supabase.co/rest/v1/influencers?id=eq.${userId}&select=bio,platforms`,
+                { headers }
+              );
+              
+              if (response.ok) {
+                const profileData = await response.json();
+                console.log("Profile data:", profileData);
+                
+                const needsSetup = !profileData.length || (!profileData[0]?.bio && !profileData[0]?.platforms);
+                console.log("Needs profile setup:", needsSetup);
+                
+                // After 1.5 seconds for better user experience
+                setTimeout(() => {
+                  if (needsSetup) {
+                    console.log("Redirecting to profile setup");
+                    navigate('/influencer-profile-setup');
+                  } else {
+                    console.log("Redirecting to dashboard");
+                    navigate('/dashboard');
+                  }
+                }, 1500);
+              } else {
+                console.error("Error fetching profile:", response.statusText);
+                // Default to dashboard
+                setTimeout(() => navigate('/dashboard'), 1500);
+              }
+            } catch (error) {
+              console.error("Error checking profile:", error);
+              setTimeout(() => navigate('/dashboard'), 1500);
+            }
+          } else {
+            // No user ID available, go to dashboard
+            setTimeout(() => navigate('/dashboard'), 1500);
+          }
+        } catch (error) {
+          console.error("Session error:", error);
+          setTimeout(() => navigate('/dashboard'), 1500);
+        }
+      };
+      
+      checkProfileNeeded();
+    }
+  }, [isLoggedIn, userData, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-green-50 flex items-center justify-center p-6">

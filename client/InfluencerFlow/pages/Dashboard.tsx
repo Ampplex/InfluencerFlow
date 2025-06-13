@@ -34,12 +34,11 @@ interface Campaign {
 }
 
 interface Brand {
-  id: number;
+  id: string;
   created_at: string;
   brand_name: string;
   brand_description: string;
   location: string;
-  brand_id: string;
 }
 
 interface Contract {
@@ -117,7 +116,7 @@ const Dashboard = () => {
       const { data: brandData, error: brandError } = await supabase
         .from('brands')
         .select('*')
-        .eq('brand_id', userId)
+        .eq('id', userId)
         .single();
 
       if (brandError && brandError.code !== 'PGRST116') { // PGRST116 is "not found"
@@ -126,9 +125,9 @@ const Dashboard = () => {
 
       if (brandData) {
         setCurrentBrand(brandData);
-        await fetchCampaigns(brandData.brand_id);
-        await fetchContracts(brandData.brand_id);
-        await fetchOutreachRecords(brandData.brand_id);
+        await fetchCampaigns(brandData.id);
+        await fetchContracts(brandData.id);
+        await fetchOutreachRecords(brandData.id);
       } else {
         // No brand found, might be a new user
         await fetchCampaigns(userId);
@@ -600,7 +599,7 @@ const Dashboard = () => {
             }
             
             // 7. Refresh contracts list
-            await fetchContracts(currentBrand?.brand_id || '');
+            await fetchContracts(currentBrand?.id || '');
           }
         } catch (error: any) {
           console.error('Error generating contract:', error);
@@ -638,8 +637,8 @@ const Dashboard = () => {
       }
     }
     
-    await fetchCampaigns(currentBrand?.brand_id || '');
-    await fetchOutreachRecords(currentBrand?.brand_id || '');
+    await fetchCampaigns(currentBrand?.id || '');
+    await fetchOutreachRecords(currentBrand?.id || '');
   };
 
   // Handle contract preview
@@ -670,10 +669,10 @@ const Dashboard = () => {
       setShowAgreementsModal(false);
       
       // Refresh data by calling the individual fetch methods
-      if (currentBrand?.brand_id) {
-        await fetchCampaigns(currentBrand.brand_id);
-        await fetchContracts(currentBrand.brand_id);
-        await fetchOutreachRecords(currentBrand.brand_id);
+      if (currentBrand?.id) {
+        await fetchCampaigns(currentBrand.id);
+        await fetchContracts(currentBrand.id);
+        await fetchOutreachRecords(currentBrand.id);
       }
       
       // Show success message

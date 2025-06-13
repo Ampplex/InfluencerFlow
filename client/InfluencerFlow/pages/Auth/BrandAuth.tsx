@@ -23,7 +23,25 @@ const BrandAuth: React.FC<AuthProps> = () => {
   
   const handleLogin = async () => {
     dispatch(setUserType("brand"));
-    await supabase.auth.signInWithOAuth({ provider: 'google' });
+    
+    // Store user type in local storage to persist through OAuth redirect
+    sessionStorage.setItem('user_type', 'brand');
+    localStorage.setItem('user_type', 'brand');
+    
+    // Also save as a URL parameter to ensure it persists through the redirect
+    const redirectUrl = new URL(window.location.origin + '/dashboard');
+    redirectUrl.searchParams.append('user_type', 'brand');
+    
+    await supabase.auth.signInWithOAuth({ 
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl.toString(),
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
+      }
+    });
   };
 
   const handleSignOut = async () => {

@@ -127,7 +127,7 @@ export const contractService = {
     const { data: brandData } = await supabase
       .from('brands')
       .select('*')
-      .eq('brand_id', session.user.id)
+      .eq('id', session.user.id)
       .single();
 
     return {
