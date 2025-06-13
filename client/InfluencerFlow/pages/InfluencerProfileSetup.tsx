@@ -20,6 +20,7 @@ const InfluencerProfileSetup: React.FC = () => {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
   
   // Get current user on component mount
@@ -43,8 +44,14 @@ const InfluencerProfileSetup: React.FC = () => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPhoneError('');
     if (!userId) {
       setError('User not authenticated. Please login again.');
+      return;
+    }
+    // Phone validation: 7-20 digits
+    if (!phone || !/^\d{7,20}$/.test(phone)) {
+      setPhoneError('Please enter a valid phone number (7-20 digits, numbers only).');
       return;
     }
     setLoading(true);
@@ -54,11 +61,10 @@ const InfluencerProfileSetup: React.FC = () => {
       const authToken = sessionData.session?.access_token;
       if (!authToken) throw new Error('No authentication token available');
       const platformsJson = JSON.stringify(platforms.filter(p => p.url.trim() !== ''));
-      const phoneNumber = phone ? parseInt(phone) : null;
       const profile = {
         id: userId,
         bio,
-        phone_num: phoneNumber,
+        phone_num: phone, // Save as string
         platforms: platformsJson,
       };
       const response = await upsertInfluencerProfile(profile, authToken);
@@ -112,7 +118,7 @@ const InfluencerProfileSetup: React.FC = () => {
           {/* Phone Number */}
           <div>
             <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-              Phone Number
+              Phone Number <span className="text-red-500">*</span>
             </label>
             <input
               type="tel"
@@ -122,7 +128,9 @@ const InfluencerProfileSetup: React.FC = () => {
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
               required
+              maxLength={20}
             />
+            {phoneError && <p className="text-red-600 text-xs mt-1">{phoneError}</p>}
           </div>
           
           {/* Platform Links */}

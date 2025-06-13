@@ -9,7 +9,7 @@ export interface PlatformLink {
 export interface InfluencerProfile {
   id: string;
   bio: string;
-  phone_num: number | null;
+  phone_num: string;
   platforms: string; // JSON stringified array
 }
 

@@ -779,14 +779,14 @@ const Dashboard = () => {
         >
           {[
             { 
-              title: 'Active Campaigns', 
+              title: 'Total Active Campaigns', 
               value: stats.activeCampaigns, 
               icon: '🚀', 
               color: 'from-blue-500 to-blue-600',
               subtitle: `${stats.totalOutreach} total outreach sent`
             },
             { 
-              title: 'Total Reach', 
+              title: 'Total Potential Reach', 
               value: stats.totalReach, 
               icon: '👥', 
               color: 'from-purple-500 to-purple-600',

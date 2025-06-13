@@ -13,7 +13,6 @@ interface FormData {
   start_date: string;
   end_date: string;
   brand_id: string;
-  brand_name: string;
   voice_enabled: boolean;
 }
 
@@ -34,7 +33,6 @@ const CreateCampaign = () => {
     start_date: '',
     end_date: '',
     brand_id: '',
-    brand_name: '',
     voice_enabled: false,
   });
 
@@ -42,6 +40,7 @@ const CreateCampaign = () => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [brand_id, setBrandId] = useState<string>('');
   const [isLoadingBrandId, setIsLoadingBrandId] = useState<boolean>(true);
+  const [brandName, setBrandName] = useState<string>('');
 
   const platformOptions = [
     { id: 'instagram', name: 'Instagram', icon: '📷' },
@@ -80,10 +79,6 @@ const CreateCampaign = () => {
 
     if (!formData.description.trim()) {
       newErrors.description = 'Description is required';
-    }
-
-    if (!formData.brand_name.trim()) {
-      newErrors.brand_name = 'Brand name is required';
     }
 
     if (!formData.budget || parseFloat(formData.budget) <= 0) {
@@ -190,6 +185,16 @@ const CreateCampaign = () => {
     setStatus('loading');
 
     try {
+      // Fetch brand name from brands table
+      const { data: brandData, error: brandError } = await supabase
+        .from('brands')
+        .select('brand_name')
+        .eq('id', brand_id)
+        .single();
+      if (brandError || !brandData) {
+        throw new Error('Could not fetch brand name.');
+      }
+      setBrandName(brandData.brand_name);
       const campaignData = {
         campaign_name: formData.campaign_name,
         description: formData.description,
@@ -199,11 +204,11 @@ const CreateCampaign = () => {
         start_date: formData.start_date,
         end_date: formData.end_date,
         brand_id: brand_id,
-        brand_name: formData.brand_name,
+        brand_name: brandData.brand_name,
         voice_enabled: formData.voice_enabled,
         status: 'draft',
-        // matched_creators: [],
         report_id: crypto.randomUUID(),
+        // matched_creators: [],
       };
       
       const { error, data } = await supabase
@@ -352,25 +357,6 @@ const CreateCampaign = () => {
                 />
                 {errors.campaign_name && (
                   <p className="text-sm text-red-600 mt-1">{errors.campaign_name}</p>
-                )}
-              </div>
-
-              {/* Brand Name */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Brand Name *
-                </label>
-                <input
-                  name="brand_name"
-                  placeholder="Your brand name"
-                  value={formData.brand_name}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-gray-50 focus:bg-white text-gray-900 font-medium ${
-                    errors.brand_name ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                />
-                {errors.brand_name && (
-                  <p className="text-sm text-red-600 mt-1">{errors.brand_name}</p>
                 )}
               </div>
 
@@ -602,7 +588,7 @@ const CreateCampaign = () => {
                     <div className="flex justify-between">
                       <span className="text-white/70">Brand:</span>
                       <span className="font-medium">
-                        {formData.brand_name || 'Not set'}
+                        {brandName || 'Not set'}
                       </span>
                     </div>
                     <div className="flex justify-between">
