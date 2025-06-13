@@ -73,7 +73,7 @@ interface OutreachRecord {
   agreed_price?: string;
 }
 
-const Dashboard = () => {
+const BrandDashboard = () => {
   const navigate = useNavigate();
   const [selectedTimeframe, setSelectedTimeframe] = useState('7 days');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -1258,4 +1258,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default BrandDashboard;

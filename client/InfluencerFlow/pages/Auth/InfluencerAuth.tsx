@@ -62,9 +62,9 @@ const InfluencerFlowAuth: React.FC = () => {
         }
       });
       
-      if (error) {
+    if (error) {
         console.error("OAuth initiation error:", error);
-      } else {
+    } else {
         console.log("OAuth initiation successful, data:", data);
       }
     } catch (err) {

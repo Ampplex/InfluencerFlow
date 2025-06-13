@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import './index.css';
 import Auth from '../pages/Auth/BrandAuth';
 import Navbar from '../components/Navbar';
-import Dashboard from '../pages/Dashboard';
+import BrandDashboard from '../pages/BrandDashboard';
 import CreateCampaign from '../pages/CreateCampaign';
 import MatchedInfluencers from '../pages/MatchedInfluencers';
 import NegotiationChat from '../pages/NegotiationChat';
@@ -22,6 +22,7 @@ import { PersistGate } from 'redux-persist/integration/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { setUserType } from '../redux/userType/userTypeSlice';
+import InfluencerDashboard from '../pages/InfluencerDashboard';
 
 // Protected Route Component
 function ProtectedRoute({ children, isLoggedIn, isLoading }: { children: React.ReactNode, isLoggedIn: boolean, isLoading: boolean }) {
@@ -175,7 +176,7 @@ function AppContent() {
                 );
                 
                 if (updateResponse.ok) {
-                  console.log('Influencer updated successfully (App.tsx - performInitialAuthCheck).');
+                console.log('Influencer updated successfully (App.tsx - performInitialAuthCheck).');
                 } else {
                   const updateError = await updateResponse.text();
                   console.error('Error updating influencer (App.tsx - performInitialAuthCheck):', updateError);
@@ -247,10 +248,10 @@ function AppContent() {
                       method: 'POST',
                       headers,
                       body: JSON.stringify({
-                        id: influencerId,
-                        influencer_username: influencerUsername,
-                        influencer_email: influencerEmail,
-                        influencer_followers: influencerFollowers,
+                  id: influencerId,
+                  influencer_username: influencerUsername,
+                  influencer_email: influencerEmail,
+                  influencer_followers: influencerFollowers,
                       })
                     }
                   );
@@ -259,7 +260,7 @@ function AppContent() {
                     console.log('New influencer inserted successfully.');
                     // New influencer always needs profile setup
                     setNeedsProfileSetup(true);
-                  } else {
+              } else {
                     const insertError = await insertResponse.text();
                     console.error('Error inserting new influencer:', insertError);
                   }
@@ -499,7 +500,9 @@ function AppContent() {
                     console.log("Redirecting to brand profile setup, needsBrandProfileSetup:", needsBrandProfileSetup, "userTypeRedux:", userTypeRedux, "authFlowCompleted:", authFlowCompleted);
                     return <Navigate to="/brand-profile-setup" replace />;
                   })()
-                : <Dashboard />
+                : userTypeRedux === 'influencer'
+                ? <InfluencerDashboard />
+                : <BrandDashboard />
               }
             </ProtectedRoute>
           } 
@@ -540,7 +543,7 @@ function AppContent() {
         />
         <Route 
           path="/contracts/create" 
-          element={
+          element={ 
             <ProtectedRoute isLoggedIn={isLoggedIn} isLoading={isLoading}>
               <ContractForm />
             </ProtectedRoute>
