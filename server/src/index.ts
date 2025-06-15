@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import contractRoutes from './routes/contractRoutes';
+import instagramYoutubeRoutes from './routes/instagramYoutubeRoutes';
 
 dotenv.config();
 
@@ -19,6 +20,8 @@ app.get('/', (_req: Request, res: Response) => {
 
 // Contract routes
 app.use('/api/contracts', contractRoutes);
+// Instagram/YouTube monitoring routes
+app.use('/api/monitor', instagramYoutubeRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server started at http://localhost:${PORT}`));

@@ -25,6 +25,27 @@ interface PromoPost {
   created_at: string;
 }
 
+interface OutreachCampaign {
+  id: string;
+  campaign_id: number;
+  influencer_id: string;
+  influencer_username: string;
+  influencer_email: string;
+  influencer_followers: number;
+  brand_id: string;
+  email_subject: string;
+  email_body: string;
+  status: 'sent' | 'pending' | 'replied' | 'declined' | 'completed';
+  sent_at: string;
+  replied_at?: string;
+  agreed_price?: number;
+  contract_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  // Add more fields as needed
+  campaign?: Campaign;
+}
+
 const InfluencerDashboard = () => {
   const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -40,6 +61,8 @@ const InfluencerDashboard = () => {
   // Metrics
   const [totalReach, setTotalReach] = useState<number>(0);
 
+  const [outreachCampaigns, setOutreachCampaigns] = useState<OutreachCampaign[]>([]);
+
   // Fetch campaigns and promo posts for this influencer
   useEffect(() => {
     const fetchUserAndData = async () => {
@@ -50,12 +73,15 @@ const InfluencerDashboard = () => {
         const uid = sessionData.session?.user?.id;
         if (!uid) throw new Error('User not authenticated');
         setUserId(uid);
-        // Fetch campaigns assigned to this influencer (future: join table)
-        const { data: campaignData, error: campaignError } = await supabase
-          .from('campaign')
-          .select('id, campaign_name, description, start_date, end_date, status, platforms, budget, brand_name');
-        if (campaignError) throw campaignError;
-        setCampaigns(campaignData || []);
+        // Fetch outreach records for this influencer
+        const { data: outreachData, error: outreachError } = await supabase
+          .from('outreach')
+          .select('*, campaign:campaign_id(id, campaign_name, description, start_date, end_date, status, platforms, budget, brand_name)')
+          .eq('influencer_id', uid);
+        if (outreachError) throw outreachError;
+        setOutreachCampaigns(outreachData || []);
+        // Flatten campaigns for metrics/cards
+        setCampaigns((outreachData || []).map((o: any) => o.campaign));
         // Fetch promo posts for this influencer
         const { data: postData, error: postError } = await supabase
           .from('promo_posts')
