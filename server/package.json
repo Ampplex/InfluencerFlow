@@ -2,7 +2,6 @@
   "name": "server",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "test": "jest",
     "start": "node dist/index.js",
@@ -16,7 +15,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",
     "@types/multer": "^1.4.13",
-    "axios": "^1.10.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",

@@ -73,15 +73,32 @@ const InfluencerDashboard = () => {
         const uid = sessionData.session?.user?.id;
         if (!uid) throw new Error('User not authenticated');
         setUserId(uid);
-        // Fetch outreach records for this influencer
+        
+        // Fetch outreach records for this influencer (without embedding)
         const { data: outreachData, error: outreachError } = await supabase
           .from('outreach')
-          .select('*, campaign:campaign_id(id, campaign_name, description, start_date, end_date, status, platforms, budget, brand_name)')
+          .select('*')
           .eq('influencer_id', uid);
         if (outreachError) throw outreachError;
+        
         setOutreachCampaigns(outreachData || []);
-        // Flatten campaigns for metrics/cards
-        setCampaigns((outreachData || []).map((o: any) => o.campaign));
+        
+        // Get unique campaign IDs from outreach data
+        const campaignIds = [...new Set((outreachData || []).map(o => o.campaign_id))];
+        
+        // Fetch campaigns separately using the campaign IDs
+        if (campaignIds.length > 0) {
+          const { data: campaignData, error: campaignError } = await supabase
+            .from('campaign')
+            .select('id, campaign_name, description, start_date, end_date, status, platforms, budget, brand_name')
+            .in('id', campaignIds);
+          if (campaignError) throw campaignError;
+          
+          setCampaigns(campaignData || []);
+        } else {
+          setCampaigns([]);
+        }
+        
         // Fetch promo posts for this influencer
         const { data: postData, error: postError } = await supabase
           .from('promo_posts')
@@ -89,6 +106,7 @@ const InfluencerDashboard = () => {
           .eq('influencer_id', uid);
         if (postError) throw postError;
         setPromoPosts(postData || []);
+        
         // Calculate total reach (dummy: 25k per post)
         setTotalReach((postData?.length || 0) * 25000);
       } catch (err: any) {
@@ -431,4 +449,4 @@ export default InfluencerDashboard;
 // 2. Show only assigned campaigns to influencer
 // 3. Notify brand in real time (subscription or polling)
 // 4. Show post analytics to brand (fetch from platform APIs)
-// 5. Add approval/review flow for brands 
+// 5. Add approval/review flow for brands
