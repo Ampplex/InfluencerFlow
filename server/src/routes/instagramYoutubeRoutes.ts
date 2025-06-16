@@ -10,4 +10,7 @@ router.post('/instagram/monitor', (req, res) => { controller.monitorInstagramPos
 // POST /api/youtube/monitor
 router.post('/youtube/monitor', (req, res) => { controller.monitorYoutubeVideo(req, res); });
 
+// GET /api/instagram-posts
+router.get('/instagram-posts', (req, res) => { controller.getInstagramPosts(req, res); });
+
 export default router; 

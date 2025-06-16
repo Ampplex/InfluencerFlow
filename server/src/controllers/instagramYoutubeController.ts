@@ -109,4 +109,35 @@ export class InstagramYoutubeController {
       return res.status(500).json({ error: 'Failed to fetch YouTube video info', details: err.message });
     }
   }
+
+  // GET /api/instagram-posts?username=USERNAME
+  async getInstagramPosts(req: Request, res: Response) {
+    console.log('GET /api/monitor/instagram-posts', req.query);
+    const username = req.query.username as string;
+    if (!username) {
+      return res.status(400).json({ error: 'Missing username' });
+    }
+    try {
+      const url = `https://graph.facebook.com/v19.0/${IG_BUSINESS_ID}?fields=business_discovery.username(${username}){media.limit(20){${MEDIA_FIELDS}}}&access_token=${ACCESS_TOKEN}`;
+      const response = await axios.get(url);
+      const media = response.data.business_discovery?.media?.data || [];
+      console.log('Business Discovery API response:', JSON.stringify(response.data, null, 2));
+      // Return only the required fields for dropdown
+      const posts = media.map((item: any) => ({
+        id: item.id,
+        caption: item.caption || '',
+        media_type: item.media_type,
+        thumbnail_url: item.thumbnail_url,
+        timestamp: item.timestamp,
+        permalink: item.permalink,
+        like_count: item.like_count,
+        comments_count: item.comments_count,
+        media_product_type: item.media_product_type || '',
+      }));
+      return res.json({ posts });
+    } catch (err: any) {
+      console.error('Error fetching Instagram posts:', err.response?.data || err.message);
+      return res.status(500).json({ error: 'Failed to fetch Instagram posts', details: err.response?.data || err.message });
+    }
+  }
 } 
