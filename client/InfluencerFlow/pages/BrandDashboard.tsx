@@ -5,6 +5,7 @@ import supabase from '../utils/supabase';
 import { contractService } from '../services/contractService';
 import { ContractTemplate } from '../types/contract';
 import { contractIntegrationService } from '../services/contractIntegrationService';
+import axios from 'axios';
 
 interface Activity {
   id: string;
@@ -866,7 +867,7 @@ const BrandDashboard = () => {
                     const hasAnyCompletedDealForCampaign = campaignOutreachRecords.some(o => o.status === 'completed');
 
                     return (
-                      <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all">
+                      <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate(`/campaign/${campaign.id}`)}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{campaign.campaign_name}</h3>
@@ -936,7 +937,10 @@ const BrandDashboard = () => {
                         <div className="flex justify-between items-center">
                           {campaign.status === 'completed' ? (
                             <motion.button
-                              onClick={() => handleShowReport(campaign)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleShowReport(campaign);
+                              }}
                               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white`}
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.98 }}
@@ -970,19 +974,28 @@ const BrandDashboard = () => {
                                       </div>
                                       <div className="flex gap-2">
                                         <button
-                                          onClick={() => handleReviewAction(campaign.id, 'accept', outreach)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleReviewAction(campaign.id, 'accept', outreach);
+                                          }}
                                           className="px-3 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs font-medium"
                                         >
                                           Accept
                                         </button>
                                         <button
-                                          onClick={() => handleReviewAction(campaign.id, 'deny', outreach)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleReviewAction(campaign.id, 'deny', outreach);
+                                          }}
                                           className="px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-medium"
                                         >
                                           Deny
                                         </button>
                                         <button
-                                          onClick={() => handleShowReport(campaign, outreach.influencer_id)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleShowReport(campaign, outreach.influencer_id);
+                                          }}
                                           className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
                                         >
                                           View Chat
@@ -995,7 +1008,10 @@ const BrandDashboard = () => {
                             )
                           ) : (
                             <motion.button
-                              onClick={() => handleCampaignAction(campaign)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/campaign/${campaign.id}`);
+                              }}
                               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${actionButton.color}`}
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.98 }}
@@ -1155,7 +1171,10 @@ const BrandDashboard = () => {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Review Agreements</h2>
               <button 
-                onClick={() => setShowAgreementsModal(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAgreementsModal(false);
+                }}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1182,14 +1201,20 @@ const BrandDashboard = () => {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleContractPreview(outreach.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleContractPreview(outreach.id);
+                        }}
                         disabled={isGeneratingContract}
                         className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 transition-colors disabled:opacity-50"
                       >
                         Preview Contract
                       </button>
                       <button
-                        onClick={() => handleGenerateContract(outreach.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGenerateContract(outreach.id);
+                        }}
                         disabled={isGeneratingContract}
                         className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
                       >
@@ -1202,7 +1227,10 @@ const BrandDashboard = () => {
             
             <div className="flex justify-end">
               <button
-                onClick={() => setShowAgreementsModal(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAgreementsModal(false);
+                }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
               >
                 Close
@@ -1218,7 +1246,8 @@ const BrandDashboard = () => {
             <div className="p-4 border-b flex justify-between items-center">
               <h2 className="text-xl font-semibold">Contract Preview</h2>
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowContractPreview(false);
                   URL.revokeObjectURL(contractPreviewUrl);
                   setContractPreviewUrl(null);
@@ -1241,7 +1270,8 @@ const BrandDashboard = () => {
 
             <div className="p-4 border-t flex justify-end gap-4">
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowContractPreview(false);
                   URL.revokeObjectURL(contractPreviewUrl);
                   setContractPreviewUrl(null);

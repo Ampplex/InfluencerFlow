@@ -23,6 +23,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { setUserType } from '../redux/userType/userTypeSlice';
 import InfluencerDashboard from '../pages/InfluencerDashboard';
+import CampaignDetails from '../pages/CampaignDetails';
 
 // Protected Route Component
 function ProtectedRoute({ children, isLoggedIn, isLoading }: { children: React.ReactNode, isLoggedIn: boolean, isLoading: boolean }) {
@@ -595,6 +596,8 @@ function AppContent() {
             <BrandProfileSetup />
           </ProtectedRoute>
         } />
+
+        <Route path="/campaign/:id" element={<ProtectedRoute isLoggedIn={isLoggedIn} isLoading={isLoading}><CampaignDetails /></ProtectedRoute>} />
       </Routes>
     </>
   );

@@ -103,6 +103,7 @@ export class InstagramYoutubeController {
         views: info.statistics.viewCount,
         likes: info.statistics.likeCount,
         comments: info.statistics.commentCount,
+        thumbnailUrl: info.snippet.thumbnails?.default?.url,
       });
     } catch (err: any) {
       console.error('Error fetching YouTube video info:', err.message);
@@ -138,6 +139,26 @@ export class InstagramYoutubeController {
     } catch (err: any) {
       console.error('Error fetching Instagram posts:', err.response?.data || err.message);
       return res.status(500).json({ error: 'Failed to fetch Instagram posts', details: err.response?.data || err.message });
+    }
+  }
+
+  // Add new method to fetch a specific Instagram post by username and postId
+  async getInstagramPostByUsernameAndId(req: Request, res: Response) {
+    const { username, postId } = req.body;
+    if (!username || !postId) {
+      return res.status(400).json({ error: 'Missing username or postId' });
+    }
+    try {
+      const url = `https://graph.facebook.com/v19.0/${IG_BUSINESS_ID}?fields=business_discovery.username(${username}){media.limit(100){${MEDIA_FIELDS}}}&access_token=${ACCESS_TOKEN}`;
+      const response = await axios.get(url);
+      const media = response.data.business_discovery?.media?.data || [];
+      const post = media.find((item: any) => item.id === postId);
+      if (!post) {
+        return res.status(404).json({ error: 'Post not found for this user' });
+      }
+      return res.json(post);
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to fetch Instagram post', details: err.response?.data || err.message });
     }
   }
 } 
