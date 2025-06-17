@@ -20,6 +20,11 @@ const MEDIA_FIELDS = [
   'media_product_type',
 ].join(',');
 
+// In-memory cache for Instagram post responses
+// For production, replace this with Redis or another persistent cache
+const igPostCache: Record<string, { data: any; timestamp: number }> = {};
+const IG_CACHE_TTL = 10 * 600 * 1000; // 10 minutes in ms
+
 function getMediaIdFromUrl(url: string): string | null {
   const match = url.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
   return match ? match[1] : null;
@@ -148,17 +153,36 @@ export class InstagramYoutubeController {
     if (!username || !postId) {
       return res.status(400).json({ error: 'Missing username or postId' });
     }
+    // Cache key per username+postId
+    const cacheKey = `${username}:${postId}`;
+    const now = Date.now();
+    // Check cache
+    if (
+      igPostCache[cacheKey] &&
+      (now - igPostCache[cacheKey].timestamp < IG_CACHE_TTL)
+    ) {
+      // Return cached response
+      return res.json(igPostCache[cacheKey].data);
+    }
     try {
       const url = `https://graph.facebook.com/v19.0/${IG_BUSINESS_ID}?fields=business_discovery.username(${username}){media.limit(100){${MEDIA_FIELDS}}}&access_token=${ACCESS_TOKEN}`;
       const response = await axios.get(url);
       const media = response.data.business_discovery?.media?.data || [];
-      const post = media.find((item: any) => item.id === postId);
+      const post = media.find((m: any) => m.id === postId);
       if (!post) {
         return res.status(404).json({ error: 'Post not found for this user' });
       }
+      // Cache the response
+      igPostCache[cacheKey] = {
+        data: post,
+        timestamp: now,
+      };
       return res.json(post);
     } catch (err: any) {
-      return res.status(500).json({ error: 'Failed to fetch Instagram post', details: err.response?.data || err.message });
+      return res.status(500).json({
+        error: 'Failed to fetch Instagram post',
+        details: err.response?.data || err.message,
+      });
     }
   }
 } 
