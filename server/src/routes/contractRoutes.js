@@ -1,6 +1,6 @@
-import { Router } from 'express';
-import multer from 'multer';
-import { ContractController } from '../controllers/contractController';
+const { Router } = require('express');
+const multer = require('multer');
+const ContractController = require('../controllers/contractController');
 
 const router = Router();
 const contractController = new ContractController();
@@ -36,4 +36,4 @@ router.get('/:id', contractController.getContract);
 // List contracts
 router.get('/', contractController.listContracts);
 
-export default router;
+module.exports = router;

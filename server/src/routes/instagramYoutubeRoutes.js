@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { InstagramYoutubeController } from '../controllers/instagramYoutubeController';
+const { Router } = require('express');
+const InstagramYoutubeController = require('../controllers/instagramYoutubeController');
 
 const router = Router();
 const controller = new InstagramYoutubeController();
@@ -16,4 +16,4 @@ router.get('/instagram-posts', (req, res) => { controller.getInstagramPosts(req,
 // POST /api/instagram/by-username-and-id
 router.post('/instagram/by-username-and-id', (req, res) => { controller.getInstagramPostByUsernameAndId(req, res); });
 
-export default router; 
+module.exports = router; 
