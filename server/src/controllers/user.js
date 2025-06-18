@@ -167,25 +167,38 @@ module.exports = class UserController {
   // POST for WhatsApp webhook
   async handleWebhook(req, res) {
     try {
+      // Debug: log the incoming payload
+      console.log("Webhook payload:", JSON.stringify(req.body, null, 2));
+
       const entry = req.body.entry && req.body.entry[0];
       const changes = entry && entry.changes && entry.changes[0];
       const value = changes && changes.value;
       const messages = value && value.messages;
-      const interactive = messages && messages[0] && messages[0].interactive;
-      const phoneNumber = messages && messages[0] && messages[0].from;
+      if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        console.log("No messages found in payload.");
+        return res.status(200).send("No messages");
+      }
+      const message = messages[0];
+      const phoneNumber = message.from;
       const text =
-        messages &&
-        messages[0] &&
-        messages[0].text &&
-        messages[0].text.body &&
-        messages[0].text.body.trim();
+        message.text && message.text.body && message.text.body.trim();
+      const interactive = message.interactive;
+
+      // Debug: log extracted values
+      console.log(
+        "Extracted phoneNumber:",
+        phoneNumber,
+        "text:",
+        text,
+        "interactive:",
+        !!interactive
+      );
 
       // If user is in the middle of campaign creation, continue the flow
       if (phoneNumber && campaignSessions[phoneNumber]) {
         const session = campaignSessions[phoneNumber];
         const currentField = getNextCampaignField(session);
         if (currentField) {
-          // Save the user's answer
           session.data[currentField.key] = parseFieldValue(
             currentField.key,
             text
@@ -195,7 +208,6 @@ module.exports = class UserController {
             await sendWhatsappTextMessage(phoneNumber, nextField.prompt);
             return res.status(200).send("Awaiting next field");
           } else {
-            // All fields collected, fetch influencers
             await sendWhatsappTextMessage(
               phoneNumber,
               "Thanks! Finding matching influencers for your campaign..."
@@ -227,17 +239,14 @@ module.exports = class UserController {
       if (interactive && interactive.type === "list_reply") {
         const selectedId = interactive.list_reply && interactive.list_reply.id;
         if (selectedId === "create_campaign") {
-          // Start campaign creation session
           campaignSessions[phoneNumber] = { data: {} };
           await sendWhatsappTextMessage(phoneNumber, campaignFields[0].prompt);
           return res.status(200).send("Started campaign creation");
         }
-        // ... handle other actions in the future ...
       }
 
-      // Restore onboarding/registered user logic for 'hi' text
+      // Only proceed with 'hi' logic if text is present
       if (text && text.toLowerCase() === "hi") {
-        // Check brands table for contact_num
         const { data, error } = await supabase
           .from("brands")
           .select("id, brand_name")
@@ -245,11 +254,9 @@ module.exports = class UserController {
           .maybeSingle();
         if (error) throw error;
         if (data) {
-          // Registered brand: send interactive list message
           await sendWhatsappListMessage(phoneNumber, data.brand_name);
           return res.status(200).json({ reply: "Welcome back!" });
         } else {
-          // Not registered: send onboarding text message
           const onboardingMsg =
             "influencerflow.in is now LIVE.\n" +
             "And for the next 48 hours, the doors are open.\n" +
@@ -267,6 +274,7 @@ module.exports = class UserController {
       }
 
       // Fallback
+      console.log("No action taken for this message.");
       return res.status(200).send("No action taken");
     } catch (error) {
       res.status(500).json({ error: error.message || "Unknown error" });
