@@ -1,9 +1,9 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const contractRoutes = require('./dist/routes/contractRoutes').default;
-const instagramYoutubeRoutes = require('./dist/routes/instagramYoutubeRoutes').default;
-const clientRoutes = require('./dist/routes/client').default;
+const contractRoutes = require('./src/routes/contractRoutes');
+const instagramYoutubeRoutes = require('./src/routes/instagramYoutubeRoutes');
+const clientRoutes = require('./src/routes/client');
 
 dotenv.config();
 
