@@ -1,6 +1,5 @@
-import { Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
-import { handleError } from '../types/errors';
+const { createClient } = require('@supabase/supabase-js');
+const { handleError } = require('../types/errors');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || 'https://eepxrnqcefpvzxqkpjaw.supabase.co',
@@ -9,9 +8,9 @@ const supabase = createClient(
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ;
 
-export class UserController {
+module.exports = class UserController {
   // GET for webhook verification
-  async verifyWebhook(req: Request, res: Response) {
+  async verifyWebhook(req, res) {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
@@ -25,19 +24,19 @@ export class UserController {
   }
 
   // POST for WhatsApp webhook
-  async handleWebhook(req: Request, res: Response) {
+  async handleWebhook(req, res) {
     try {
       // Meta's Cloud API payload structure
-      const entry = req.body.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
-      const messages = value?.messages;
+      const entry = req.body.entry && req.body.entry[0];
+      const changes = entry && entry.changes && entry.changes[0];
+      const value = changes && changes.value;
+      const messages = value && value.messages;
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return res.status(200).send('No messages');
       }
       const message = messages[0];
       const phoneNumber = message.from; // WhatsApp phone number (string)
-      const text = message.text?.body?.trim();
+      const text = message.text && message.text.body && message.text.body.trim();
       if (!phoneNumber || !text) {
         return res.status(200).send('No phone or text');
       }

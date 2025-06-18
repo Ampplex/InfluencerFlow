@@ -1,9 +1,9 @@
-import { FileValidationError } from '../types/errors';
+const { FileValidationError } = require('../types/errors');
 
 const MAX_SIGNATURE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_SIGNATURE_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
-export function validateSignatureFile(file: Buffer, mimeType: string): void {
+function validateSignatureFile(file, mimeType) {
     console.log('validateSignatureFile: Received file buffer length:', file.length);
     console.log('validateSignatureFile: Received MIME type:', mimeType);
 
@@ -40,4 +40,6 @@ export function validateSignatureFile(file: Buffer, mimeType: string): void {
         throw new FileValidationError('Failed to validate signature file due to unexpected error');
     }
     console.log('validateSignatureFile: All validations passed.'); // This should appear at the very end if no errors
-} 
+}
+
+module.exports = { validateSignatureFile }; 

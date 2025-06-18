@@ -1,7 +1,6 @@
-import { Request, Response } from 'express';
-import axios from 'axios';
-import { google } from 'googleapis';
-import 'dotenv/config';
+const axios = require('axios');
+const { google } = require('googleapis');
+require('dotenv/config');
 
 const IG_BUSINESS_ID = process.env.IG_BUSINESS_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
@@ -22,22 +21,22 @@ const MEDIA_FIELDS = [
 
 // In-memory cache for Instagram post responses
 // For production, replace this with Redis or another persistent cache
-const igPostCache: Record<string, { data: any; timestamp: number }> = {};
+const igPostCache = {};
 const IG_CACHE_TTL = 10 * 600 * 1000; // 10 minutes in ms
 
-function getMediaIdFromUrl(url: string): string | null {
+function getMediaIdFromUrl(url) {
   const match = url.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
   return match ? match[1] : null;
 }
 
-function getVideoIdFromUrl(url: string): string | null {
+function getVideoIdFromUrl(url) {
   const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   return match ? match[1] : null;
 }
 
-export class InstagramYoutubeController {
+module.exports = class InstagramYoutubeController {
   // POST /api/instagram/monitor
-  async monitorInstagramPost(req: Request, res: Response) {
+  async monitorInstagramPost(req, res) {
     const { postUrl } = req.body;
     if (!postUrl) {
       return res.status(400).json({ error: 'Missing postUrl' });
@@ -51,9 +50,9 @@ export class InstagramYoutubeController {
       // Fetch all media for the business account
       const url = `https://graph.facebook.com/v19.0/${IG_BUSINESS_ID}?fields=media{caption,media_type,media_url,timestamp,permalink,like_count,comments_count}&access_token=${ACCESS_TOKEN}`;
       const response = await axios.get(url);
-      const mediaList = response.data.media?.data || [];
+      const mediaList = (response.data.media && response.data.media.data) || [];
       // Find the post or reel by matching the code in the permalink
-      const targetPost = mediaList.find((post: any) => post.permalink.includes(mediaCode));
+      const targetPost = mediaList.find(post => post.permalink.includes(mediaCode));
       if (!targetPost) {
         return res.status(404).json({ error: 'Post not found' });
       }
@@ -68,14 +67,14 @@ export class InstagramYoutubeController {
         likeCount: targetPost.like_count,
         commentCount: targetPost.comments_count
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching post info:', err.message);
-      return res.status(500).json({ error: 'Failed to fetch Instagram post info', details: err.response?.data || err.message });
+      return res.status(500).json({ error: 'Failed to fetch Instagram post info', details: (err.response && err.response.data) || err.message });
     }
   }
 
   // POST /api/youtube/monitor
-  async monitorYoutubeVideo(req: Request, res: Response) {
+  async monitorYoutubeVideo(req, res) {
     const { videoUrl } = req.body;
     if (!videoUrl) {
       return res.status(400).json({ error: 'Missing videoUrl' });
@@ -89,7 +88,7 @@ export class InstagramYoutubeController {
         version: 'v3',
         auth: YOUTUBE_API_KEY,
       });
-      const yt: any = youtube;
+      const yt = youtube;
       const { data } = await yt.videos.list({
         part: 'snippet,contentDetails,statistics,liveStreamingDetails',
         id: videoId,
@@ -108,28 +107,28 @@ export class InstagramYoutubeController {
         views: info.statistics.viewCount,
         likes: info.statistics.likeCount,
         comments: info.statistics.commentCount,
-        thumbnailUrl: info.snippet.thumbnails?.default?.url,
+        thumbnailUrl: info.snippet.thumbnails && info.snippet.thumbnails.default && info.snippet.thumbnails.default.url,
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching YouTube video info:', err.message);
       return res.status(500).json({ error: 'Failed to fetch YouTube video info', details: err.message });
     }
   }
 
   // GET /api/instagram-posts?username=USERNAME
-  async getInstagramPosts(req: Request, res: Response) {
+  async getInstagramPosts(req, res) {
     console.log('GET /api/monitor/instagram-posts', req.query);
-    const username = req.query.username as string;
+    const username = req.query.username;
     if (!username) {
       return res.status(400).json({ error: 'Missing username' });
     }
     try {
       const url = `https://graph.facebook.com/v19.0/${IG_BUSINESS_ID}?fields=business_discovery.username(${username}){media.limit(20){${MEDIA_FIELDS}}}&access_token=${ACCESS_TOKEN}`;
       const response = await axios.get(url);
-      const media = response.data.business_discovery?.media?.data || [];
+      const media = (response.data.business_discovery && response.data.business_discovery.media && response.data.business_discovery.media.data) || [];
       console.log('Business Discovery API response:', JSON.stringify(response.data, null, 2));
       // Return only the required fields for dropdown
-      const posts = media.map((item: any) => ({
+      const posts = media.map(item => ({
         id: item.id,
         caption: item.caption || '',
         media_type: item.media_type,
@@ -141,14 +140,14 @@ export class InstagramYoutubeController {
         media_product_type: item.media_product_type || '',
       }));
       return res.json({ posts });
-    } catch (err: any) {
-      console.error('Error fetching Instagram posts:', err.response?.data || err.message);
-      return res.status(500).json({ error: 'Failed to fetch Instagram posts', details: err.response?.data || err.message });
+    } catch (err) {
+      console.error('Error fetching Instagram posts:', (err.response && err.response.data) || err.message);
+      return res.status(500).json({ error: 'Failed to fetch Instagram posts', details: (err.response && err.response.data) || err.message });
     }
   }
 
   // Add new method to fetch a specific Instagram post by username and postId
-  async getInstagramPostByUsernameAndId(req: Request, res: Response) {
+  async getInstagramPostByUsernameAndId(req, res) {
     const { username, postId } = req.body;
     if (!username || !postId) {
       return res.status(400).json({ error: 'Missing username or postId' });
@@ -167,8 +166,8 @@ export class InstagramYoutubeController {
     try {
       const url = `https://graph.facebook.com/v19.0/${IG_BUSINESS_ID}?fields=business_discovery.username(${username}){media.limit(100){${MEDIA_FIELDS}}}&access_token=${ACCESS_TOKEN}`;
       const response = await axios.get(url);
-      const media = response.data.business_discovery?.media?.data || [];
-      const post = media.find((m: any) => m.id === postId);
+      const media = (response.data.business_discovery && response.data.business_discovery.media && response.data.business_discovery.media.data) || [];
+      const post = media.find(m => m.id === postId);
       if (!post) {
         return res.status(404).json({ error: 'Post not found for this user' });
       }
@@ -178,11 +177,11 @@ export class InstagramYoutubeController {
         timestamp: now,
       };
       return res.json(post);
-    } catch (err: any) {
+    } catch (err) {
       return res.status(500).json({
         error: 'Failed to fetch Instagram post',
-        details: err.response?.data || err.message,
+        details: (err.response && err.response.data) || err.message,
       });
     }
   }
-} 
+}; 

@@ -1,7 +1,6 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { ContractTemplate } from '../types/contract';
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 
-export async function generatePDF(data: ContractTemplate & { signature_url?: string; signature_buffer?: Buffer }): Promise<Buffer> {
+async function generatePDF(data) {
     // Create a new PDF document
     const doc = await PDFDocument.create();
     const page = doc.addPage();
@@ -17,7 +16,7 @@ export async function generatePDF(data: ContractTemplate & { signature_url?: str
     const lineHeight = 20;
     
     // Helper function to write text
-    const writeText = (text: string, isBold = false) => {
+    const writeText = (text, isBold = false) => {
         page.drawText(text, {
             x: margin,
             y: currentY,
@@ -101,4 +100,6 @@ export async function generatePDF(data: ContractTemplate & { signature_url?: str
     const pdfBytes = await doc.save();
     
     return Buffer.from(pdfBytes);
-} 
+}
+
+module.exports = { generatePDF }; 

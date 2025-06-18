@@ -1,29 +1,20 @@
-import { Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
-import { Contract, ContractStatus, ContractTemplate, SignContractRequest } from '../types/contract';
-import { generatePDF } from '../utils/pdfGenerator';
-import { validateSignatureFile } from '../utils/fileValidation';
-import { ContractError, StorageError, handleError } from '../types/errors';
-import { v4 as uuidv4 } from 'uuid';
-import multer from 'multer';
-
-// Extend the Request interface to include file
-declare module 'express-serve-static-core' {
-  interface Request {
-    file?: Express.Multer.File;
-  }
-}
+const { createClient } = require('@supabase/supabase-js');
+const { generatePDF } = require('../utils/pdfGenerator');
+const { validateSignatureFile } = require('../utils/fileValidation');
+const { ContractError, StorageError, handleError } = require('../types/errors');
+const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
 
 const supabase = createClient(
     process.env.SUPABASE_URL || "https://eepxrnqcefpvzxqkpjaw.supabase.co",
     process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlcHhybnFjZWZwdnp4cWtwamF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg2MzIzNDgsImV4cCI6MjA2NDIwODM0OH0.zTsgRk2c8zdO0SnQBI9CicH_NodH_C9duSdbwojAKBQ"
 );
 
-export class ContractController {
+module.exports = class ContractController {
     // Generate contract preview
-    async previewContract(req: Request, res: Response) {
+    async previewContract(req, res) {
         try {
-            const contractData: ContractTemplate = req.body;
+            const contractData = req.body;
 
             if (!contractData.influencer_name || !contractData.brand_name) {
                 throw new ContractError('Missing required contract information');
@@ -43,9 +34,9 @@ export class ContractController {
     }
 
     // Generate a new contract from template
-    async generateContract(req: Request, res: Response) {
+    async generateContract(req, res) {
         try {
-            const templateData: ContractTemplate = req.body;
+            const templateData = req.body;
             const { influencer_id, brand_id } = req.body;
             const authHeader = req.headers.authorization;
 
@@ -64,12 +55,12 @@ export class ContractController {
             const pdfBuffer = await generatePDF(templateData);
 
             // Create contract record in database first
-            const contract: Contract = {
+            const contract = {
                 id: contract_id,
                 template_id: 'default',
                 influencer_id,
                 brand_id,
-                status: ContractStatus.PENDING_SIGNATURE,
+                status: 'PENDING_SIGNATURE',
                 contract_data: templateData,
                 contract_url: '', // Will update after upload
                 created_at: new Date(),
@@ -132,7 +123,7 @@ export class ContractController {
     }
 
     // Updated signContract method in ContractController
-    async signContract(req: Request, res: Response) {
+    async signContract(req, res) {
         try {
             console.log('Request body:', req.body);
             console.log('Request file:', req.file);
@@ -190,7 +181,7 @@ export class ContractController {
                 throw new ContractError('Failed to fetch contract: ' + contractError.message);
             }
 
-            if (contract.status === ContractStatus.SIGNED) {
+            if (contract.status === 'SIGNED') {
                 throw new ContractError('Contract has already been signed');
             }
 
@@ -203,8 +194,8 @@ export class ContractController {
                 });
                 console.log('Sign Contract - Final PDF buffer generated. Length:', finalPdfBuffer.length);
             } catch (pdfGenErr) {
-                console.error('Error generating final PDF: Name:', (pdfGenErr as Error).name, 'Message:', (pdfGenErr as Error).message, 'Stack:', (pdfGenErr as Error).stack);
-                throw new ContractError('Failed to generate final PDF: ' + (pdfGenErr as Error).message);
+                console.error('Error generating final PDF: Name:', pdfGenErr.name, 'Message:', pdfGenErr.message, 'Stack:', pdfGenErr.stack);
+                throw new ContractError('Failed to generate final PDF: ' + pdfGenErr.message);
             }
 
             // Upload final signed PDF
@@ -229,7 +220,7 @@ export class ContractController {
             const { data: updatedContract, error: updateError } = await supabase
                 .from('contracts')
                 .update({
-                    status: ContractStatus.SIGNED,
+                    status: 'SIGNED',
                     signed_by: user_id,
                     signed_at: new Date().toISOString(),
                     signature_url: signatureUrl,
@@ -254,7 +245,7 @@ export class ContractController {
     }
 
     // Get contract by ID
-    async getContract(req: Request, res: Response) {
+    async getContract(req, res) {
         try {
             const { id } = req.params;
             const authHeader = req.headers.authorization;
@@ -289,7 +280,7 @@ export class ContractController {
     }
 
     // List contracts for a user (either influencer or brand)
-    async listContracts(req: Request, res: Response) {
+    async listContracts(req, res) {
         try {
             const { user_id, role } = req.query;
             const authHeader = req.headers.authorization;
