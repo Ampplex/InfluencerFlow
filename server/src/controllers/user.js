@@ -10,30 +10,6 @@ const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
-async function sendWhatsappTemplateMessage(to) {
-  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
-    throw new Error(
-      "WhatsApp phone number ID or access token not set in environment variables"
-    );
-  }
-  const url = `https://graph.facebook.com/v22.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  const data = {
-    messaging_product: "whatsapp",
-    to,
-    type: "template",
-    template: {
-      name: "hello_world",
-      language: { code: "en_US" },
-    },
-  };
-  await axios.post(url, data, {
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-  });
-}
-
 async function sendWhatsappTextMessage(to, text) {
   if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
     throw new Error(
@@ -46,6 +22,69 @@ async function sendWhatsappTextMessage(to, text) {
     to,
     type: "text",
     text: { body: text },
+  };
+  await axios.post(url, data, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+async function sendWhatsappListMessage(to, name) {
+  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+    throw new Error(
+      "WhatsApp phone number ID or access token not set in environment variables"
+    );
+  }
+  const url = `https://graph.facebook.com/v22.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const data = {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      header: {
+        type: "text",
+        text: `Hello ${name || "there"}!`,
+      },
+      body: {
+        text: "What do you want to do today?",
+      },
+      footer: {
+        text: "Select an option below:",
+      },
+      action: {
+        button: "Select option",
+        sections: [
+          {
+            title: "Options",
+            rows: [
+              {
+                id: "create_campaign",
+                title: "Create campaign",
+                description: "Start a new influencer campaign",
+              },
+              {
+                id: "get_updates",
+                title: "Get real time updates",
+                description: "Get updates about your campaigns",
+              },
+              {
+                id: "notifications",
+                title: "Notifications",
+                description: "View your notifications",
+              },
+              {
+                id: "other",
+                title: "Other",
+                description: "More options coming soon",
+              },
+            ],
+          },
+        ],
+      },
+    },
   };
   await axios.post(url, data, {
     headers: {
@@ -103,20 +142,26 @@ module.exports = class UserController {
         // Check brands table for contact_num
         const { data, error } = await supabase
           .from("brands")
-          .select("id")
+          .select("id, brand_name")
           .eq("contact_num", phoneNumber)
           .maybeSingle();
         if (error) throw error;
         if (data) {
-          // Registered brand: send custom text message
-          await sendWhatsappTextMessage(
-            phoneNumber,
-            "Welcome back, you are a registered brand!"
-          );
+          // Registered brand: send interactive list message
+          await sendWhatsappListMessage(phoneNumber, data.brand_name);
           return res.status(200).json({ reply: "Welcome back!" });
         } else {
-          // Not registered: send template message
-          await sendWhatsappTemplateMessage(phoneNumber);
+          // Not registered: send onboarding text message
+          const onboardingMsg =
+            "influencerflow.in is now LIVE.\n" +
+            "And for the next 48 hours, the doors are open.\n" +
+            "For years, influencer marketing has been a game of guesswork, endless spreadsheets, and wasted budgets. While you've been busy managing the chaos, your competitors have been looking for an edge.\n" +
+            "That edge is here.\n" +
+            "We are giving the first 100 brands that sign up for Early Access the power to automate their workflow, discover authentic creators, and measure what actually matters before anyone else.\n" +
+            "After the first 100 spots are claimed, access will be closed.\n" +
+            "The next move is yours. Don't get left behind.\n" +
+            "Claim one of the 100 spots now: https://influencerflow.in";
+          await sendWhatsappTextMessage(phoneNumber, onboardingMsg);
           return res
             .status(200)
             .json({ reply: "You are not registered with us. Please sign up." });
