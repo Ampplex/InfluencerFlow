@@ -1,11 +1,38 @@
 const { createClient } = require('@supabase/supabase-js');
+const axios = require("axios");
 
 const supabase = createClient(
   process.env.SUPABASE_URL || 'https://eepxrnqcefpvzxqkpjaw.supabase.co',
   process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlcHhybnFjZWZwdnp4cWtwamF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg2MzIzNDgsImV4cCI6MjA2NDIwODM0OH0.zTsgRk2c8zdO0SnQBI9CicH_NodH_C9duSdbwojAKBQ'
 );
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ;
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+
+async function sendWhatsappTemplateMessage(to) {
+  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+    throw new Error(
+      "WhatsApp phone number ID or access token not set in environment variables"
+    );
+  }
+  const url = `https://graph.facebook.com/v22.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const data = {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: {
+      name: "hello_world",
+      language: { code: "en_US" },
+    },
+  };
+  await axios.post(url, data, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+  });
+}
 
 module.exports = class UserController {
   // GET for webhook verification
@@ -43,17 +70,21 @@ module.exports = class UserController {
       if (text.toLowerCase() === 'hi') {
         // Check brands table for contact_num
         const { data, error } = await supabase
-          .from('brands')
-          .select('id')
-          .eq('contact_num', phoneNumber)
+          .from("brands")
+          .select("id")
+          .eq("contact_num", phoneNumber)
           .maybeSingle();
         if (error) throw error;
+        // Send WhatsApp template message reply
+        await sendWhatsappTemplateMessage(phoneNumber);
         if (data) {
           // Registered brand
-          return res.status(200).json({ reply: 'Welcome back!' });
+          return res.status(200).json({ reply: "Welcome back!" });
         } else {
           // Not registered
-          return res.status(200).json({ reply: 'You are not registered with us. Please sign up.' });
+          return res
+            .status(200)
+            .json({ reply: "You are not registered with us. Please sign up." });
         }
       } else {
         // Ignore other messages for now
