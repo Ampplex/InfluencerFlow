@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import contractRoutes from './routes/contractRoutes';
 import instagramYoutubeRoutes from './routes/instagramYoutubeRoutes';
+import clientRoutes from './routes/client';
 
 dotenv.config();
 
@@ -10,6 +11,7 @@ const app = express();
 
 // ✅ Configure CORS to allow frontend during development and deploy
 const allowedOrigins = [
+  '*',
   'http://localhost:5173',
   'https://influencerflow-964513157102.asia-south1.run.app'
 ];
@@ -38,6 +40,7 @@ app.get('/', (_req: Request, res: Response) => {
 // ✅ API routes
 app.use('/api/contracts', contractRoutes);
 app.use('/api/monitor', instagramYoutubeRoutes);
+app.use('/', clientRoutes);
 
 // ✅ Start server
 const PORT = process.env.PORT || 3000;
