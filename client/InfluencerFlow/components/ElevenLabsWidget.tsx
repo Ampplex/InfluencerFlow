@@ -1,9 +1,40 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState} from "react";
+import supabase from '../utils/supabase';
 
-const ElevenLabsWidget = () => {
+const ElevenLabsWidget = ({email, campaign_id}: any) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [campaignData, setCampaignData] = useState<any>(null);
 
   useEffect(() => {
+    const fetchCampaign = async () => {
+      try {
+        if (!campaign_id) return;
+        const { data, error } = await supabase
+          .from('campaign')
+          .select('*')
+          .eq('id', campaign_id)
+          .single();
+        if (error) {
+          console.error('Error fetching campaign:', error);
+        } else {
+          console.log(data);
+          if (data) {
+            setCampaignData(data);
+            // setDuration('2_weeks'); // You may map campaign duration fields if available
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching campaign:', error);
+        // Display Error Message
+      }
+    };
+    fetchCampaign();
+  }, [campaign_id]);
+
+
+  useEffect(() => {
+    if (!campaignData) return;
+
     const scriptId = "elevenlabs-widget-script";
 
     if (!document.getElementById(scriptId)) {
@@ -19,17 +50,18 @@ const ElevenLabsWidget = () => {
       if ((window as any).customElements?.get("elevenlabs-convai")) {
         const widget = document.createElement("elevenlabs-convai");
 
-        widget.setAttribute("agent-id", "agent_01jxykr1xhfzarw8fg68nxtfs1");
+        widget.setAttribute("agent-id", "agent_01jy01vv79f39rj05z86k8kdkj");
         widget.setAttribute(
           "dynamic-variables",
           JSON.stringify({
-            brand_name: "Meta",
+            brand_name: campaignData.brand_name,
             influencer_name: "Ankesh Kumar",
-            campaign_description:
-              "Looking for influencer to post 3–4 images and thumbnails about the campaign",
-            campaign: "MetaThon",
-            brand_description: "Meta is a leading social media tech giant",
-            budget: "200",
+            campaign_description: campaignData.description,
+            campaign: campaignData.campaign_name,
+            brand_description: "",
+            budget: campaignData.budget,
+            campaign_id: campaign_id,
+            email: email
           })
         );
 
@@ -42,7 +74,7 @@ const ElevenLabsWidget = () => {
     }, 100);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [campaignData, campaign_id, email]);
 
   return (
     <div className="w-full h-screen flex flex-col">

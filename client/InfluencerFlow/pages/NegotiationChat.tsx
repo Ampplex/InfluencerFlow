@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, Bot, User, DollarSign, Clock, MessageSquare, CheckCircle, XCircle, RefreshCw, Play, Users, TrendingUp } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import supabase from '../utils/supabase';
+import ElevenLabsWidget from '../components/ElevenLabsWidget';
 
 interface Message {
   id: string;
@@ -511,6 +512,7 @@ const NegotiationChat: React.FC = () => {
   if (showStartForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <ElevenLabsWidget email={email} campaign_id={campaign_id} />
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">

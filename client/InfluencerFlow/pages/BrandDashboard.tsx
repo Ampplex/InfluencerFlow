@@ -257,58 +257,91 @@ const BrandDashboard = () => {
     }
   };
 
-  // Fetch CRM logs for a campaign
-  const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
-    setShowReportModal(true);
-    setReportCampaign(campaign);
-    setReportLoading(true);
-    setReportError(null);
-    setReportLogs([]);
-    try {
-      let query = supabase
-        .from('CRM_logs')
-        .select('content')
-        .eq('campaign_id', campaign.id);
+// Fetch CRM logs for a campaign
+const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
+  setShowReportModal(true);
+  setReportCampaign(campaign);
+  setReportLoading(true);
+  setReportError(null);
+  setReportLogs([]);
 
-      if (influencerId) {
-        query = query.eq('influencer_id', influencerId);
-        const { data, error } = await query.single();
-        if (error) {
-          if (error.code === 'PGRST116') { // No rows found
-            setReportLogs([]);
-          } else {
-            throw error;
-          }
+  try {
+    let query = supabase
+      .from('CRM_logs')
+      .select('transcripts, content') // Select both columns
+      .eq('campaign_id', campaign.id);
+
+    if (influencerId) {
+      query = query.eq('influencer_id', influencerId);
+      const { data, error } = await query.single();
+      if (error) {
+        if (error.code === 'PGRST116') { // No rows found
+          setReportLogs([]);
+        } else {
+          throw error;
         }
-        setReportLogs(Array.isArray(data?.content) ? data.content : []);
       } else {
-        // General campaign report: fetch all CRM logs for the campaign
-        const { data, error } = await query; // No .single() here
-        if (error) {
-          if (error.code === 'PGRST116') { // No rows found
-            setReportLogs([]);
-          } else {
-            throw error;
-          }
+        // Check if transcripts column exists and is not null
+        if (data?.transcripts && Array.isArray(data.transcripts)) {
+          // New format: map transcripts to match the expected reportLogs structure
+          const formattedLogs = data.transcripts.map((entry: { role: string; message: string }, index: number) => ({
+            type: entry.role === 'user' ? 'user' : 'agent',
+            content: entry.message,
+            timestamp: null, // Timestamps not provided in new format; use null or generate if needed
+            id: `${campaign.id}-${influencerId}-${index}` // Generate a unique ID for rendering
+          }));
+          setReportLogs(formattedLogs);
+        } else if (data?.content && Array.isArray(data.content)) {
+          // Old format: use content directly
+          setReportLogs(data.content);
+        } else {
+          setReportLogs([]);
         }
+      }
+    } else {
+      // General campaign report: fetch all CRM logs for the campaign
+      const { data, error } = await query;
+      if (error) {
+        if (error.code === 'PGRST116') { // No rows found
+          setReportLogs([]);
+        } else {
+          throw error;
+        }
+      } else {
         let allLogs: any[] = [];
         if (data) {
           data.forEach((logEntry: any) => {
-            if (Array.isArray(logEntry.content)) {
+            if (logEntry.transcripts && Array.isArray(logEntry.transcripts)) {
+              // New format: map transcripts
+              const formattedLogs = logEntry.transcripts.map((entry: { role: string; message: string }, index: number) => ({
+                type: entry.role === 'user' ? 'user' : 'agent',
+                content: entry.message,
+                timestamp: null, // Timestamps not provided in new format
+                id: `${logEntry.campaign_id}-${logEntry.influencer_id || 'general'}-${index}`
+              }));
+              allLogs = allLogs.concat(formattedLogs);
+            } else if (logEntry.content && Array.isArray(logEntry.content)) {
+              // Old format: use content directly
               allLogs = allLogs.concat(logEntry.content);
             }
           });
         }
-        // Sort the combined logs by timestamp before setting
-        allLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        // Sort logs by timestamp if available, or by index for new format
+        allLogs.sort((a, b) => {
+          if (a.timestamp && b.timestamp) {
+            return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+          }
+          return a.id.localeCompare(b.id); // Fallback to ID sorting for new format
+        });
         setReportLogs(allLogs);
       }
-    } catch (err: any) {
-      setReportError(err.message || 'Failed to fetch report logs.');
-    } finally {
-      setReportLoading(false);
     }
-  };
+  } catch (err: any) {
+    setReportError(err.message || 'Failed to fetch report logs.');
+  } finally {
+    setReportLoading(false);
+  }
+};
 
   // Calculate real statistics from data
   const calculateStats = () => {

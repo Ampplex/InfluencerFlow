@@ -1,7 +1,7 @@
 import { Contract, ContractTemplate, SignContractRequest } from '../types/contract';
 import supabase from '../utils/supabase';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://influencerflow-r8bs.onrender.com';
 
 export const contractService = {
   previewContract: async (data: ContractTemplate): Promise<Blob> => {
@@ -60,7 +60,7 @@ export const contractService = {
     formData.append('user_id', userId);
     formData.append('signature_file', signatureFile);
 
-    const response = await fetch('http://localhost:3000/api/contracts/sign', {
+    const response = await fetch('https://influencerflow-r8bs.onrender.com/api/contracts/sign', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`
