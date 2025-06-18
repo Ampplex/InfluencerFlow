@@ -4,6 +4,8 @@ import supabase from '../utils/supabase';
 const ElevenLabsWidget = ({email, campaign_id}: any) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [campaignData, setCampaignData] = useState<any>(null);
+  const [brand_description, setBrandDescription] = useState<any>("");
+  const [influencerData, setInfluencerData] = useState<any>(null);
 
   useEffect(() => {
     const fetchCampaign = async () => {
@@ -23,6 +25,7 @@ const ElevenLabsWidget = ({email, campaign_id}: any) => {
             // setDuration('2_weeks'); // You may map campaign duration fields if available
           }
         }
+
       } catch (error) {
         console.error('Error fetching campaign:', error);
         // Display Error Message
@@ -31,9 +34,50 @@ const ElevenLabsWidget = ({email, campaign_id}: any) => {
     fetchCampaign();
   }, [campaign_id]);
 
+  useEffect(() => {
+    const fetchBrand = async () => {
+      console.log("we have", campaignData.brand_name)
+        // Fetch brands table
+        const {data, error} = await supabase
+        .from("brands")
+        .select("brand_description")
+        .eq("brand_name", campaignData.brand_name);
+        if (error) {
+          console.error(error)
+        } else if (data) {
+          setBrandDescription(data);
+        }
+    }
+
+    fetchBrand();
+  }, [campaign_id, campaignData])
+
+  useEffect(() => {
+    // Fetch influencer name from email
+    const fetchInfluencerName = async () => {
+      const {data, error} = await supabase
+      .from("influencers")
+      .select("*")
+      .eq("influencer_email", email)
+      .single();
+
+      if (error) {
+        console.error(error)
+      } else if (data) {
+        setInfluencerData(data);
+      }
+    }
+
+    fetchInfluencerName();
+  }, [email])
 
   useEffect(() => {
     if (!campaignData) return;
+    if (!brand_description) return;
+    if (!influencerData) return;
+
+    console.log("Brand description: ",brand_description[0].brand_description);
+    console.log("Influencer name ", influencerData.influencer_username);
 
     const scriptId = "elevenlabs-widget-script";
 
@@ -55,10 +99,10 @@ const ElevenLabsWidget = ({email, campaign_id}: any) => {
           "dynamic-variables",
           JSON.stringify({
             brand_name: campaignData.brand_name,
-            influencer_name: "Ankesh Kumar",
+            influencer_name: influencerData.influencer_username,
             campaign_description: campaignData.description,
             campaign: campaignData.campaign_name,
-            brand_description: "",
+            brand_description: brand_description[0].brand_description,
             budget: campaignData.budget,
             campaign_id: campaign_id,
             email: email
