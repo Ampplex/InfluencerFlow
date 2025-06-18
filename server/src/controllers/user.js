@@ -10,6 +10,20 @@ const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
+// In-memory store for campaign creation sessions
+const campaignSessions = {};
+
+const campaignFields = [
+  { key: 'campaign_name', prompt: 'What is the name of your campaign?' },
+  { key: 'description', prompt: 'Please provide a short description for your campaign.' },
+  { key: 'platforms', prompt: 'Which platforms do you want to target? (Reply with comma-separated values, e.g. Instagram, TikTok, YouTube)' },
+  { key: 'preferred_languages', prompt: 'Preferred languages for influencers? (e.g. English, Hindi, etc.)' },
+  { key: 'budget', prompt: 'What is your total budget for this campaign? (in INR)' },
+  { key: 'start_date', prompt: 'What is the start date? (YYYY-MM-DD)' },
+  { key: 'end_date', prompt: 'What is the end date? (YYYY-MM-DD)' },
+  { key: 'voice_enabled', prompt: 'Do you want voice-enabled content? (yes/no)' },
+];
+
 async function sendWhatsappTextMessage(to, text) {
   if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
     throw new Error(
@@ -94,6 +108,37 @@ async function sendWhatsappListMessage(to, name) {
   });
 }
 
+async function fetchMatchedInfluencers(query) {
+  const url =
+    "https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/query";
+  const response = await axios.post(url, { query, k: 10 });
+  return response.data && response.data.influencers
+    ? response.data.influencers
+    : [];
+}
+
+function getNextCampaignField(session) {
+  for (const field of campaignFields) {
+    if (!(field.key in session.data)) {
+      return field;
+    }
+  }
+  return null;
+}
+
+function parseFieldValue(key, value) {
+  if (key === "platforms") {
+    return value
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  if (key === "voice_enabled") {
+    return /^(yes|y|true|1)$/i.test(value);
+  }
+  return value;
+}
+
 module.exports = class UserController {
   // GET for webhook verification
   async verifyWebhook(req, res) {
@@ -122,22 +167,75 @@ module.exports = class UserController {
   // POST for WhatsApp webhook
   async handleWebhook(req, res) {
     try {
-      console.log("Webhook hit", req.body);
-      // Meta's Cloud API payload structure
       const entry = req.body.entry && req.body.entry[0];
       const changes = entry && entry.changes && entry.changes[0];
       const value = changes && changes.value;
       const messages = value && value.messages;
-      if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        return res.status(200).send("No messages");
-      }
-      const message = messages[0];
-      const phoneNumber = message.from; // WhatsApp phone number (string)
+      const interactive = messages && messages[0] && messages[0].interactive;
+      const phoneNumber = messages && messages[0] && messages[0].from;
       const text =
-        message.text && message.text.body && message.text.body.trim();
-      if (!phoneNumber || !text) {
-        return res.status(200).send("No phone or text");
+        messages &&
+        messages[0] &&
+        messages[0].text &&
+        messages[0].text.body &&
+        messages[0].text.body.trim();
+
+      // If user is in the middle of campaign creation, continue the flow
+      if (phoneNumber && campaignSessions[phoneNumber]) {
+        const session = campaignSessions[phoneNumber];
+        const currentField = getNextCampaignField(session);
+        if (currentField) {
+          // Save the user's answer
+          session.data[currentField.key] = parseFieldValue(
+            currentField.key,
+            text
+          );
+          const nextField = getNextCampaignField(session);
+          if (nextField) {
+            await sendWhatsappTextMessage(phoneNumber, nextField.prompt);
+            return res.status(200).send("Awaiting next field");
+          } else {
+            // All fields collected, fetch influencers
+            await sendWhatsappTextMessage(
+              phoneNumber,
+              "Thanks! Finding matching influencers for your campaign..."
+            );
+            const influencers = await fetchMatchedInfluencers(session.data);
+            if (influencers.length === 0) {
+              await sendWhatsappTextMessage(
+                phoneNumber,
+                "No matching influencers found. Try adjusting your campaign criteria."
+              );
+            } else {
+              let msg = "Here are some matching influencers:\n";
+              influencers.forEach((inf, idx) => {
+                msg += `\n${idx + 1}. ${inf.username} (${
+                  inf.followers
+                } followers)\n${inf.bio ? inf.bio + "\n" : ""}${
+                  inf.link ? inf.link : ""
+                }`;
+              });
+              await sendWhatsappTextMessage(phoneNumber, msg);
+            }
+            delete campaignSessions[phoneNumber];
+            return res.status(200).send("Influencer list sent");
+          }
+        }
       }
+
+      // Handle interactive list selection (e.g. create_campaign)
+      if (interactive && interactive.type === "list_reply") {
+        const selectedId = interactive.list_reply && interactive.list_reply.id;
+        if (selectedId === "create_campaign") {
+          // Start campaign creation session
+          campaignSessions[phoneNumber] = { data: {} };
+          await sendWhatsappTextMessage(phoneNumber, campaignFields[0].prompt);
+          return res.status(200).send("Started campaign creation");
+        }
+        // ... handle other actions in the future ...
+      }
+
+      // Fallback to previous logic for hi/onboarding
       if (text.toLowerCase() === "hi") {
         // Check brands table for contact_num
         const { data, error } = await supabase
@@ -170,6 +268,8 @@ module.exports = class UserController {
         // Ignore other messages for now
         return res.status(200).send("Ignored");
       }
+
+      return res.status(200).send("No action taken");
     } catch (error) {
       res.status(500).json({ error: error.message || "Unknown error" });
     }
