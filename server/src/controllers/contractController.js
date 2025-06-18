@@ -1,7 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const { generatePDF } = require('../utils/pdfGenerator');
 const { validateSignatureFile } = require('../utils/fileValidation');
-const { ContractError, StorageError, handleError } = require('../types/errors');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 
@@ -17,7 +16,7 @@ module.exports = class ContractController {
             const contractData = req.body;
 
             if (!contractData.influencer_name || !contractData.brand_name) {
-                throw new ContractError('Missing required contract information');
+                throw new Error('Missing required contract information');
             }
 
             // Generate preview PDF without saving
@@ -28,8 +27,7 @@ module.exports = class ContractController {
             res.setHeader('Content-Disposition', 'inline; filename=contract_preview.pdf');
             res.send(pdfBuffer);
         } catch (error) {
-            const { status, message } = handleError(error);
-            res.status(status).json({ error: message });
+            res.status(500).json({ error: error.message || 'Unknown error' });
         }
     }
 
@@ -41,11 +39,11 @@ module.exports = class ContractController {
             const authHeader = req.headers.authorization;
 
             if (!influencer_id || !brand_id) {
-                throw new ContractError('Missing influencer_id or brand_id');
+                throw new Error('Missing influencer_id or brand_id');
             }
 
             if (!authHeader) {
-                throw new ContractError('No authorization header');
+                throw new Error('No authorization header');
             }
 
             // Generate contract ID
@@ -75,7 +73,7 @@ module.exports = class ContractController {
 
             if (contractError) {
                 console.error('Database insert error:', contractError);
-                throw new ContractError('Failed to create contract record: ' + contractError.message);
+                throw new Error('Failed to create contract record: ' + contractError.message);
             }
 
             // Now upload PDF to Supabase Storage
@@ -93,7 +91,7 @@ module.exports = class ContractController {
                     .from('contracts')
                     .delete()
                     .eq('id', contract_id);
-                throw new StorageError('Failed to upload contract PDF: ' + uploadError.message);
+                throw new Error('Failed to upload contract PDF: ' + uploadError.message);
             }
 
             // Get the public URL for the uploaded file
@@ -111,14 +109,12 @@ module.exports = class ContractController {
 
             if (updateError) {
                 console.error('Contract update error:', updateError);
-                throw new ContractError('Failed to update contract with file URL: ' + updateError.message);
+                throw new Error('Failed to update contract with file URL: ' + updateError.message);
             }
 
             res.status(201).json(updatedContract);
         } catch (error) {
-            console.error('Contract generation error:', error);
-            const { status, message } = handleError(error);
-            res.status(status).json({ error: message });
+            res.status(500).json({ error: error.message || 'Unknown error' });
         }
     }
 
@@ -135,15 +131,15 @@ module.exports = class ContractController {
 
             // Validation
             if (!contract_id || !user_id) {
-                throw new ContractError('Missing required signature information: contract_id or user_id');
+                throw new Error('Missing required signature information: contract_id or user_id');
             }
 
             if (!req.file) {
-                throw new ContractError('Missing signature file');
+                throw new Error('Missing signature file');
             }
 
             if (!authHeader) {
-                throw new ContractError('No authorization header');
+                throw new Error('No authorization header');
             }
 
             const signature_file = req.file.buffer;
@@ -162,7 +158,7 @@ module.exports = class ContractController {
 
             if (signatureError) {
                 console.error('Signature upload error:', signatureError);
-                throw new StorageError('Failed to upload signature: ' + signatureError.message);
+                throw new Error('Failed to upload signature: ' + signatureError.message);
             }
 
             // Get the public URL for the signature
@@ -178,11 +174,11 @@ module.exports = class ContractController {
                 .single();
 
             if (contractError) {
-                throw new ContractError('Failed to fetch contract: ' + contractError.message);
+                throw new Error('Failed to fetch contract: ' + contractError.message);
             }
 
             if (contract.status === 'SIGNED') {
-                throw new ContractError('Contract has already been signed');
+                throw new Error('Contract has already been signed');
             }
 
             let finalPdfBuffer;
@@ -195,7 +191,7 @@ module.exports = class ContractController {
                 console.log('Sign Contract - Final PDF buffer generated. Length:', finalPdfBuffer.length);
             } catch (pdfGenErr) {
                 console.error('Error generating final PDF: Name:', pdfGenErr.name, 'Message:', pdfGenErr.message, 'Stack:', pdfGenErr.stack);
-                throw new ContractError('Failed to generate final PDF: ' + pdfGenErr.message);
+                throw new Error('Failed to generate final PDF: ' + pdfGenErr.message);
             }
 
             // Upload final signed PDF
@@ -208,7 +204,7 @@ module.exports = class ContractController {
 
             if (finalPdfError) {
                 console.error('Final PDF upload error:', finalPdfError);
-                throw new StorageError('Failed to upload signed contract: ' + finalPdfError.message);
+                throw new Error('Failed to upload signed contract: ' + finalPdfError.message);
             }
 
             // Get the public URL for the signed PDF
@@ -233,14 +229,12 @@ module.exports = class ContractController {
 
             if (updateError) {
                 console.error('Contract update error:', updateError);
-                throw new ContractError('Failed to update contract status: ' + updateError.message);
+                throw new Error('Failed to update contract status: ' + updateError.message);
             }
 
             res.status(200).json(updatedContract);
         } catch (error) {
-            console.error('Contract signing error:', error);
-            const { status, message } = handleError(error);
-            res.status(status).json({ error: message });
+            res.status(500).json({ error: error.message || 'Unknown error' });
         }
     }
 
@@ -251,7 +245,7 @@ module.exports = class ContractController {
             const authHeader = req.headers.authorization;
 
             if (!authHeader) {
-                throw new ContractError('No authorization header');
+                throw new Error('No authorization header');
             }
 
             // Set auth context for Supabase client
@@ -273,9 +267,7 @@ module.exports = class ContractController {
 
             res.status(200).json(data);
         } catch (error) {
-            console.error('Error fetching contract:', error);
-            const { status, message } = handleError(error);
-            res.status(status).json({ error: message });
+            res.status(500).json({ error: error.message || 'Unknown error' });
         }
     }
 
@@ -286,7 +278,7 @@ module.exports = class ContractController {
             const authHeader = req.headers.authorization;
 
             if (!authHeader) {
-                throw new ContractError('No authorization header');
+                throw new Error('No authorization header');
             }
 
             // Set auth context for Supabase client
@@ -310,9 +302,7 @@ module.exports = class ContractController {
 
             res.status(200).json(data);
         } catch (error) {
-            console.error('Error listing contracts:', error);
-            const { status, message } = handleError(error);
-            res.status(status).json({ error: message });
+            res.status(500).json({ error: error.message || 'Unknown error' });
         }
     }
 } 

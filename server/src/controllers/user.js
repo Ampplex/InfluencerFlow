@@ -1,5 +1,4 @@
 const { createClient } = require('@supabase/supabase-js');
-const { handleError } = require('../types/errors');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || 'https://eepxrnqcefpvzxqkpjaw.supabase.co',
@@ -60,8 +59,7 @@ module.exports = class UserController {
         return res.status(200).send('Ignored');
       }
     } catch (error) {
-      const { status, message } = handleError(error);
-      res.status(status).json({ error: message });
+      res.status(500).json({ error: error.message || 'Unknown error' });
     }
   }
 }
