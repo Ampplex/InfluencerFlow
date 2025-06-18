@@ -46,3 +46,17 @@ export interface SignContractRequest {
   user_id: string;
   mime_type: string;
 } 
+
+export interface EarlyAccessRequest {
+  id: string;
+  name: string;
+  email: string;
+  brand: string;
+  business_help?: string | null;
+  origin_domain: string;
+  user_agent?: string | null;
+  ip_address?: string | null;
+  request_fingerprint?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at?: string;
+}

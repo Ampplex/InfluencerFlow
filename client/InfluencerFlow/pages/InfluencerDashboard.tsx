@@ -1,607 +1,463 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import supabase from '../utils/supabase';
-import axios from 'axios';
+import { 
+  User, 
+  Phone, 
+  Instagram, 
+  Youtube, 
+  Twitter, 
+  Linkedin, 
+  Globe, 
+  CheckCircle, 
+  AlertCircle,
+  ArrowRight,
+  Users,
+  Edit3
+} from 'lucide-react';
+import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
-// Types
-interface Campaign {
-  id: number;
-  campaign_name: string;
-  description: string;
-  start_date: string;
-  end_date: string;
-  status?: string;
-  platforms?: string;
-  budget?: number;
-  brand_name?: string;
-}
+// Mock supabase for demo - replace with actual import
+const supabase = {
+  auth: {
+    getSession: async () => ({
+      data: {
+        session: {
+          user: { id: 'user-123' },
+          access_token: 'mock-token'
+        }
+      }
+    })
+  }
+};
 
-interface PromoPost {
-  id: number;
-  campaign_id: number;
-  influencer_id: string;
-  post_url: string;
+// Mock utility functions - replace with actual imports
+const getCurrentUserId = async () => {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id || null;
+};
+
+const upsertInfluencerProfile = async (profile: any, authToken: string) => {
+  // Mock API call - replace with actual implementation
+  return {
+    ok: true,
+    json: async () => ({ success: true })
+  };
+};
+
+const logOnboardingError = (component: string, error: any) => {
+  console.error(`${component} Error:`, error);
+};
+
+interface PlatformLink {
   platform: string;
-  created_at: string;
+  url: string;
 }
 
-interface OutreachCampaign {
-  id: string;
-  campaign_id: number;
-  influencer_id: string;
-  influencer_username: string;
-  influencer_email: string;
-  influencer_followers: number;
-  brand_id: string;
-  email_subject: string;
-  email_body: string;
-  status: 'sent' | 'pending' | 'replied' | 'declined' | 'completed';
-  sent_at: string;
-  replied_at?: string;
-  agreed_price?: number;
-  contract_id?: string;
-  created_at?: string;
-  updated_at?: string;
-  // Add more fields as needed
-  campaign?: Campaign;
-}
-
-const InfluencerDashboard = () => {
-  const navigate = useNavigate();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [promoPosts, setPromoPosts] = useState<PromoPost[]>([]);
-  const [postUrl, setPostUrl] = useState('');
-  const [platform, setPlatform] = useState('');
-  const [selectedCampaign, setSelectedCampaign] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string>('');
-
-  // Metrics
-  const [totalReach, setTotalReach] = useState<number>(0);
-
-  const [outreachCampaigns, setOutreachCampaigns] = useState<OutreachCampaign[]>([]);
-
-  // Add state for influencer profile and Instagram posts
-  const [influencerProfile, setInfluencerProfile] = useState<any>(null);
-  const [instagramUsername, setInstagramUsername] = useState<string | null>(null);
-  const [igPosts, setIgPosts] = useState<any[]>([]);
-  const [igLoading, setIgLoading] = useState(false);
-  const [igError, setIgError] = useState<string | null>(null);
-  const [selectedIgPost, setSelectedIgPost] = useState<string>('');
-
-  // Fetch campaigns and promo posts for this influencer
+const InfluencerProfileSetup: React.FC = () => {
+  // State for form fields
+  const [bio, setBio] = useState('');
+  const [phone, setPhone] = useState('');
+  const [platforms, setPlatforms] = useState<PlatformLink[]>([
+    { platform: 'Instagram', url: '' },
+    { platform: 'Twitter', url: '' },
+    { platform: 'TikTok', url: '' },
+    { platform: 'LinkedIn', url: '' },
+    { platform: 'YouTube', url: '' },
+  ]);
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
+  
+  // Get current user on component mount
   useEffect(() => {
-    const fetchUserAndData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const uid = sessionData.session?.user?.id;
-        if (!uid) throw new Error('User not authenticated');
-        setUserId(uid);
-        
-        // Fetch outreach records for this influencer (without embedding)
-        const { data: outreachData, error: outreachError } = await supabase
-          .from('outreach')
-          .select('*')
-          .eq('influencer_id', uid);
-        if (outreachError) throw outreachError;
-        
-        setOutreachCampaigns(outreachData || []);
-        
-        // Get unique campaign IDs from outreach data
-        const campaignIds = [...new Set((outreachData || []).map(o => o.campaign_id))];
-        
-        // Fetch campaigns separately using the campaign IDs
-        if (campaignIds.length > 0) {
-          const { data: campaignData, error: campaignError } = await supabase
-            .from('campaign')
-            .select('id, campaign_name, description, start_date, end_date, status, platforms, budget, brand_name')
-            .in('id', campaignIds);
-          if (campaignError) throw campaignError;
-          
-          setCampaigns(campaignData || []);
-        } else {
-          setCampaigns([]);
-        }
-        
-        // Fetch promo posts for this influencer
-        const { data: postData, error: postError } = await supabase
-          .from('promo_posts')
-          .select('*')
-          .eq('influencer_id', uid);
-        if (postError) throw postError;
-        setPromoPosts(postData || []);
-        
-        // Calculate total reach (dummy: 25k per post)
-        setTotalReach((postData?.length || 0) * 25000);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load data');
-      } finally {
-        setLoading(false);
+    const checkCurrentUser = async () => {
+      const id = await getCurrentUserId();
+      if (id) {
+        setUserId(id);
+      } else {
+        // Handle navigation to auth page
+        console.log('User not authenticated, redirect to /auth/influencer');
       }
     };
-    fetchUserAndData();
+    checkCurrentUser();
   }, []);
-
-  // Fetch influencer profile (including platforms) on load
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const uid = sessionData.session?.user?.id;
-        if (!uid) return;
-        // Fetch influencer profile
-        const { data, error } = await supabase
-          .from('influencers')
-          .select('platforms')
-          .eq('id', uid)
-          .single();
-        if (error) return;
-        setInfluencerProfile(data);
-        // Parse Instagram username from platforms
-        if (data && data.platforms) {
-          try {
-            const platformsArr = JSON.parse(data.platforms);
-            const ig = platformsArr.find((p: any) => p.platform === 'Instagram' && p.url);
-            if (ig && ig.url) {
-              // Extract username from URL (e.g. https://instagram.com/username)
-              const match = ig.url.match(/instagram.com\/(.+?)(\/|$)/);
-              setInstagramUsername(match ? match[1] : null);
-            } else {
-              setInstagramUsername(null);
-            }
-          } catch (e) {
-            setInstagramUsername(null);
-          }
-        } else {
-          setInstagramUsername(null);
-        }
-      } catch (e) {
-        setInfluencerProfile(null);
-        setInstagramUsername(null);
-      }
-    };
-    fetchProfile();
-  }, []);
-
-  // Fetch Instagram posts/reels if Instagram is selected and username exists
-  useEffect(() => {
-    console.log('DEBUG: useEffect triggered. platform:', platform, 'instagramUsername:', instagramUsername);
-    const fetchInstagramPosts = async () => {
-      if (platform !== 'Instagram' || !instagramUsername) {
-        console.log('DEBUG: Not fetching IG posts. platform:', platform, 'instagramUsername:', instagramUsername);
-        setIgPosts([]);
-        return;
-      }
-      setIgLoading(true);
-      setIgError(null);
-      try {
-        console.log('DEBUG: Fetching IG posts for username:', instagramUsername);
-        const response = await axios.get(`/api/monitor/instagram-posts?username=${instagramUsername}`);
-        console.log('DEBUG: Full IG posts response:', response.data);
-        // Defensive: handle both { posts: [...] } and [...] directly
-        let posts = [];
-        if (Array.isArray(response.data)) {
-          posts = response.data;
-        } else if (response.data && Array.isArray(response.data.posts)) {
-          posts = response.data.posts;
-        } else if (typeof response.data === 'string' && response.data.startsWith('<!doctype html>')) {
-          setIgError('Could not fetch Instagram posts. Please check your connection or try again later.');
-          setIgPosts([]);
-          console.error('DEBUG: Received HTML instead of JSON:', response.data);
-          return;
-        } else {
-          setIgError('Unexpected response from server.');
-          setIgPosts([]);
-          console.error('DEBUG: Unexpected IG posts response:', response.data);
-          return;
-        }
-        setIgPosts(posts || []);
-        if (!posts || posts.length === 0) {
-          setIgError('No posts found. Make sure your Instagram account is a business/creator account and is connected to the platform.');
-        }
-        console.log('DEBUG: IG posts fetched:', posts);
-      } catch (err: any) {
-        setIgError('Failed to fetch Instagram posts. Please check your connection or try again later.');
-        setIgPosts([]);
-        console.log('DEBUG: Error fetching IG posts:', err);
-      } finally {
-        setIgLoading(false);
-      }
-    };
-    fetchInstagramPosts();
-  }, [platform, instagramUsername]);
-
-  // Submit a new promo post
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    // If Instagram, require a selected post; else require postUrl
-    if (!selectedCampaign || !platform || (platform === 'Instagram' ? !selectedIgPost : !postUrl)) {
-      setError('Please select a campaign, platform, and enter/select the post.');
+  
+  const handlePlatformChange = (index: number, value: string) => {
+    const updatedPlatforms = [...platforms];
+    updatedPlatforms[index].url = value;
+    setPlatforms(updatedPlatforms);
+  };
+  
+  const handleSubmit = async () => {
+    setPhoneError('');
+    
+    if (!userId) {
+      setError('User not authenticated. Please login again.');
       return;
     }
+    
+    // Phone validation: 7-20 digits
+    if (!phone || !/^\d{7,20}$/.test(phone)) {
+      setPhoneError('Please enter a valid phone number (7-20 digits, numbers only).');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    
     try {
-      // For Instagram, store the post ID; for others, store the URL
-      let postValue = '';
-      if (platform === 'Instagram') {
-        // selectedIgPost is the post ID
-        postValue = selectedIgPost;
-      } else {
-        postValue = postUrl;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authToken = sessionData.session?.access_token;
+      if (!authToken) throw new Error('No authentication token available');
+      
+      const platformsJson = JSON.stringify(platforms.filter(p => p.url.trim() !== ''));
+      const profile = {
+        id: userId,
+        bio,
+        phone_num: phone,
+        platforms: platformsJson,
+      };
+      
+      const response = await upsertInfluencerProfile(profile, authToken);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Failed to update profile: ${JSON.stringify(errorData)}`);
       }
-      const { error: insertError } = await supabase
-        .from('promo_posts')
-        .insert([
-          {
-            campaign_id: selectedCampaign,
-            influencer_id: userId,
-            post_url: postValue, // If you have a post_id field, use that instead
-            platform,
-          },
-        ]);
-      if (insertError) throw insertError;
-      setSuccess('Promotional post link submitted!');
-      setPostUrl('');
-      setPlatform('');
-      setSelectedCampaign(null);
-      setSelectedIgPost('');
-      // Refresh posts
-      const { data: postData } = await supabase
-        .from('promo_posts')
-        .select('*')
-        .eq('influencer_id', userId);
-      setPromoPosts(postData || []);
-      setTotalReach((postData?.length || 0) * 25000);
+      
+      sessionStorage.setItem('profileSetupCompleted', 'true');
+      // Profile setup completed successfully
+      console.log('Profile setup completed, redirect to dashboard');
+      
     } catch (err: any) {
-      setError(err.message || 'Failed to submit post link');
+      setError(err.message || 'Failed to update profile');
+      logOnboardingError('InfluencerProfileSetup', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Metrics for dashboard cards
-  const metrics = [
-    {
-      title: 'Total Campaigns',
-      value: campaigns.length,
-      icon: '📢',
-      color: 'from-blue-500 to-blue-600',
-      subtitle: 'Campaigns you can participate in',
-    },
-    {
-      title: 'Posts Submitted',
-      value: promoPosts.length,
-      icon: '🔗',
-      color: 'from-purple-500 to-purple-600',
-      subtitle: 'Promotional posts submitted',
-    },
-    {
-      title: 'Total Reach',
-      value: totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : totalReach,
-      icon: '👥',
-      color: 'from-green-500 to-green-600',
-      subtitle: 'Estimated audience reached',
-    },
-  ];
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case 'Instagram': return <Instagram className="w-5 h-5" />;
+      case 'TikTok': return <Globe className="w-5 h-5" />;
+      case 'YouTube': return <Youtube className="w-5 h-5" />;
+      case 'Twitter': return <Twitter className="w-5 h-5" />;
+      case 'LinkedIn': return <Linkedin className="w-5 h-5" />;
+      default: return <Globe className="w-5 h-5" />;
+    }
+  };
 
-  // UI
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 animate-pulse">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">Loading Dashboard</h3>
-          <p className="text-gray-600">Fetching your campaign data...</p>
-        </div>
-      </div>
-    );
-  }
+  const getPlatformPlaceholder = (platform: string) => {
+    switch (platform) {
+      case 'Instagram': return 'https://instagram.com/yourusername';
+      case 'TikTok': return 'https://tiktok.com/@yourusername';
+      case 'YouTube': return 'https://youtube.com/c/yourchannel';
+      case 'Twitter': return 'https://twitter.com/yourusername';
+      case 'LinkedIn': return 'https://linkedin.com/in/yourprofile';
+      default: return `https://${platform.toLowerCase()}.com/yourprofile`;
+    }
+  };
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-6">
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md mx-auto text-center">
-          <div className="text-red-600 text-5xl mb-4">⚠️</div>
-          <h3 className="text-xl font-bold text-red-900 mb-2">Error Loading Dashboard</h3>
-          <p className="text-red-700 mb-6">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-200"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const completedPlatforms = platforms.filter(p => p.url.trim() !== '').length;
+  const progressPercentage = ((bio ? 1 : 0) + (phone ? 1 : 0) + (completedPlatforms > 0 ? 1 : 0)) / 3 * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-white dark:bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+      <motion.div 
+        className="max-w-4xl mx-auto"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
         {/* Header */}
-        <motion.div
-          className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Influencer Dashboard</h1>
-            <p className="text-gray-600">Track your campaigns, submit posts, and monitor your reach.</p>
+        <div className="text-center mb-12">
+          <div className="flex items-center justify-center mb-8">
+            <div className="w-8 h-8 mr-3">
+              <img 
+                src="https://assets.influencerflow.in/logos/png/if-bg-w.png" 
+                alt="InfluencerFlow Logo" 
+                className="w-full h-full object-contain" 
+              />
+            </div>
+            <span className="font-mono text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+              InfluencerFlow.in
+            </span>
           </div>
-        </motion.div>
 
-        {/* Metrics Cards */}
-        <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          {metrics.map((stat, idx) => (
-            <motion.div
-              key={idx}
-              className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
-              whileHover={{ y: -2 }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 bg-gradient-to-r ${stat.color} rounded-xl flex items-center justify-center text-2xl`}>
-                  {stat.icon}
-                </div>
-                <span className="text-2xl font-bold text-gray-900">{stat.value}</span>
-              </div>
-              <h3 className="text-gray-600 font-medium mb-1">{stat.title}</h3>
-              <p className="text-xs text-gray-500">{stat.subtitle}</p>
-            </motion.div>
-          ))}
-        </motion.div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Campaigns List */}
           <motion.div
-            className="lg:col-span-2"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
           >
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Your Campaigns</h2>
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-3 tracking-tight">
+              Complete Your Creator Profile
+            </h1>
+            <p className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-6">
+              // Tell brands about yourself and showcase your social presence
+            </p>
+
+            {/* Progress Bar */}
+            <div className="max-w-md mx-auto mb-8">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-mono text-slate-600 dark:text-slate-400">
+                  setup_progress()
+                </span>
+                <span className="text-sm font-mono text-slate-600 dark:text-slate-400">
+                  {Math.round(progressPercentage)}%
+                </span>
               </div>
-              {campaigns.length > 0 ? (
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {campaigns.map((campaign) => {
-                    const progress = (() => {
-                      const start = new Date(campaign.start_date);
-                      const end = new Date(campaign.end_date);
-                      const now = new Date();
-                      if (now < start) return 0;
-                      if (now > end) return 100;
-                      const total = end.getTime() - start.getTime();
-                      const elapsed = now.getTime() - start.getTime();
-                      return Math.floor((elapsed / total) * 100);
-                    })();
-                    return (
-                      <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900">{campaign.campaign_name}</h3>
-                            <p className="text-sm text-gray-600">{campaign.brand_name || ''}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="px-3 py-1 rounded-full text-xs font-medium border border-blue-200 bg-blue-50 text-blue-800">
-                              {campaign.status || 'active'}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {(() => {
-                                const end = new Date(campaign.end_date);
-                                const now = new Date();
-                                const diff = end.getTime() - now.getTime();
-                                if (diff <= 0) return 'Completed';
-                                const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-                                return `${days} days left`;
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-4 gap-4 mb-4">
-                          <div>
-                            <p className="text-xs text-gray-500">Platforms</p>
-                            <p className="font-semibold">{campaign.platforms || 'All'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Budget</p>
-                            <p className="font-semibold">{campaign.budget ? `$${campaign.budget}` : '-'}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Start</p>
-                            <p className="font-semibold">{campaign.start_date}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">End</p>
-                            <p className="font-semibold">{campaign.end_date}</p>
-                          </div>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                          <div
-                            className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${progress}%` }}
-                          ></div>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-3">{progress}% complete</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-4">📋</div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No campaigns yet</h3>
-                  <p className="text-gray-600 mb-4">You are not assigned to any campaigns yet.</p>
-                </div>
-              )}
+              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                <div
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${progressPercentage}%` }}
+                ></div>
+              </div>
             </div>
           </motion.div>
+        </div>
 
-          {/* Submit Post Link & Submitted Posts */}
-          <div className="space-y-6">
-            {/* Submit Post Link Form */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg">
+          <div className="space-y-8">
+            
+            {/* Bio Section */}
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
+                creator_bio() {"{"}
+              </div>
+              
+              <div className="pl-4 space-y-4">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
+                    <Edit3 className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      About You
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Tell brands what makes you unique
+                    </p>
+                  </div>
+                </div>
+
+                <textarea
+                  rows={4}
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm"
+                  placeholder="I'm a lifestyle content creator focused on authentic brand partnerships. My audience loves fashion, travel, and wellness content..."
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-500 font-mono">
+                  // Describe your content style, audience, and what you're passionate about
+                </p>
+              </div>
+
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mt-4">
+                {"}"}
+              </div>
+            </motion.div>
+
+            {/* Contact Section */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">Submit Promotional Post</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Campaign</label>
-                    <select
-                      value={selectedCampaign || ''}
-                      onChange={e => setSelectedCampaign(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    >
-                      <option value="" disabled>Select a campaign</option>
-                      {campaigns.map(c => (
-                        <option key={c.id} value={c.id}>{c.campaign_name}</option>
-                      ))}
-                    </select>
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
+                contact_info() {"{"}
+              </div>
+              
+              <div className="pl-4 space-y-4">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-blue-500 rounded-xl flex items-center justify-center">
+                    <Phone className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
-                    <select
-                      value={platform}
-                      onChange={e => {
-                        setPlatform(e.target.value);
-                        setSelectedIgPost('');
-                        console.log('DEBUG: Platform changed to', e.target.value);
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      required
-                    >
-                      <option value="" disabled>Select platform</option>
-                      <option value="Instagram">Instagram</option>
-                      <option value="YouTube">YouTube</option>
-                      <option value="TikTok">TikTok</option>
-                      <option value="Twitter">Twitter</option>
-                      <option value="LinkedIn">LinkedIn</option>
-                      <option value="Other">Other</option>
-                    </select>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Phone Number
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      For important campaign communications
+                    </p>
                   </div>
-                  {/* If Instagram is selected and username exists, show IG post dropdown */}
-                  {platform === 'Instagram' && instagramUsername ? (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Select Instagram Post</label>
-                      {igLoading ? (
-                        <div className="text-gray-500 text-sm">Loading posts...</div>
-                      ) : igError ? (
-                        <div className="text-red-500 text-sm">{igError}</div>
-                      ) : igPosts.length > 0 ? (
-                        <select
-                          value={selectedIgPost}
-                          onChange={e => setSelectedIgPost(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                          required
-                        >
-                          <option value="" disabled>Select a post</option>
-                          {igPosts.map((post: any) => (
-                            <option key={post.id} value={post.id}>{post.caption ? post.caption.substring(0, 50) : post.id}</option>
-                          ))}
-                        </select>
-                      ) : null}
-                    </div>
-                  ) : (
-                    // Fallback: regular URL input for other platforms or if no IG username
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Post URL</label>
-                      <input
-                        type="url"
-                        value={postUrl}
-                        onChange={e => setPostUrl(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="https://instagram.com/your-post"
-                        required
-                      />
-                    </div>
-                  )}
-                  {error && <div className="text-red-600 text-sm">{error}</div>}
-                  {success && <div className="text-green-600 text-sm">{success}</div>}
-                  <button
-                    type="submit"
-                    className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-md font-semibold shadow hover:from-indigo-700 hover:to-purple-700"
-                    disabled={loading || (platform === 'Instagram' && !selectedIgPost)}
-                  >
-                    Submit Post Link
-                  </button>
-                </form>
+                </div>
+
+                <input
+                  type="tel"
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono"
+                  placeholder="+1234567890"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                  required
+                  maxLength={20}
+                />
+                {phoneError && (
+                  <Alert className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/10">
+                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    <AlertDescription className="text-red-800 dark:text-red-200 font-mono text-sm">
+                      {phoneError}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <p className="text-xs text-slate-500 dark:text-slate-500 font-mono">
+                  // Used for contract signing and payment notifications
+                </p>
+              </div>
+
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mt-4">
+                {"}"}
               </div>
             </motion.div>
 
-            {/* List of Submitted Posts */}
+            {/* Social Media Platforms */}
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.4 }}
             >
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h2 className="text-xl font-bold mb-4">Your Submitted Promotional Posts</h2>
-                {promoPosts.length === 0 ? (
-                  <p className="text-gray-500">No posts submitted yet.</p>
-                ) : (
-                  <ul className="space-y-3">
-                    {promoPosts.map(post => (
-                      <li key={post.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <div className="font-semibold text-gray-900">{campaigns.find(c => c.id === post.campaign_id)?.campaign_name || 'Campaign'}</div>
-                          <div className="text-gray-700 text-sm">{post.platform}</div>
-                          {post.platform === 'Instagram' ? (
-                            <a
-                              href={`https://instagram.com/p/${post.post_url}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 underline break-all text-sm"
-                            >
-                              View Instagram Post (ID: {post.post_url})
-                            </a>
-                          ) : (
-                            <a
-                              href={post.post_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 underline break-all text-sm"
-                            >
-                              {post.post_url}
-                            </a>
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
+                social_media_profiles() {"{"}
+              </div>
+              
+              <div className="pl-4 space-y-6">
+                <div className="flex items-center space-x-3 mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+                    <Users className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Your Social Presence
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Connect your platforms to showcase your reach
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {platforms.map((platform, index) => (
+                    <HoverBorderGradient
+                      key={platform.platform}
+                      containerClassName="rounded-xl"
+                      as="div"
+                      className="bg-white dark:bg-slate-800 p-4"
+                    >
+                      <div className="flex items-center space-x-3 mb-3">
+                        <div className="w-8 h-8 bg-slate-100 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+                          {getPlatformIcon(platform.platform)}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-slate-900 dark:text-slate-100">
+                            {platform.platform}
+                          </h4>
+                          {platform.url && (
+                            <Badge variant="outline" className="mt-1">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Connected
+                            </Badge>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500 mt-2 md:mt-0">Submitted: {new Date(post.created_at).toLocaleString()}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                      </div>
+                      <input
+                        type="url"
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono"
+                        placeholder={getPlatformPlaceholder(platform.platform)}
+                        value={platform.url}
+                        onChange={(e) => handlePlatformChange(index, e.target.value)}
+                      />
+                    </HoverBorderGradient>
+                  ))}
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-blue-600 dark:text-blue-400 text-xs font-bold">!</span>
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium text-slate-900 dark:text-slate-100 mb-1">
+                        Platform Tips
+                      </p>
+                      <ul className="text-slate-600 dark:text-slate-400 space-y-1 font-mono text-xs">
+                        <li>• Provide complete URLs (e.g., https://instagram.com/username)</li>
+                        <li>• Connect platforms where you're most active</li>
+                        <li>• Public accounts perform better for brand partnerships</li>
+                        <li>• You can add more platforms later in settings</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mt-4">
+                {"}"}
+              </div>
+            </motion.div>
+
+            {/* Error Display */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Alert className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/10">
+                  <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  <AlertDescription className="text-red-800 dark:text-red-200">
+                    {error}
+                  </AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
+
+            {/* Submit Button */}
+            <motion.div
+              className="flex justify-end pt-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+            >
+              <HoverBorderGradient
+                containerClassName="rounded-xl"
+                as="button"
+                className={`bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center px-8 py-4 text-base font-medium ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                onClick={loading ? undefined : handleSubmit}
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 mr-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                    completing_setup...
+                  </>
+                ) : (
+                  <>
+                    complete_profile()
+                    <ArrowRight className="w-4 h-4 ml-3" />
+                  </>
+                )}
+              </HoverBorderGradient>
             </motion.div>
           </div>
         </div>
-      </div>
+
+        {/* Footer */}
+        <div className="text-center mt-8">
+          <p className="font-mono text-xs text-slate-500 dark:text-slate-500">
+            // Your profile helps brands find and connect with you
+          </p>
+        </div>
+      </motion.div>
     </div>
   );
 };
 
-export default InfluencerDashboard;
-
-// Integration steps:
-// 1. Link campaigns to influencers (assignments table or join logic)
-// 2. Show only assigned campaigns to influencer
-// 3. Notify brand in real time (subscription or polling)
-// 4. Show post analytics to brand (fetch from platform APIs)
-// 5. Add approval/review flow for brands
+export default InfluencerProfileSetup;

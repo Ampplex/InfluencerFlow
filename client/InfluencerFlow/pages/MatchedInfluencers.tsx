@@ -1,6 +1,26 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import supabase from '../utils/supabase';
+import { motion } from 'framer-motion';
+import { 
+  Users, 
+  Mail, 
+  ExternalLink, 
+  Check, 
+  Target, 
+  ArrowLeft, 
+  Search, 
+  Zap,
+  Eye,
+  Heart,
+  MessageCircle,
+  TrendingUp,
+  CheckCircle,
+  AlertCircle
+} from 'lucide-react';
+import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Define the structure of an influencer object
 interface Influencer {
@@ -52,7 +72,14 @@ function MatchedInfluencers() {
   const [isOutreaching, setIsOutreaching] = useState(false);
   const [campaignInfo, setCampaignInfo] = useState<string>('');
 
-  // Real API call instead of mock data
+  // Generate profile photo URL for influencer
+  const getProfilePhoto = (influencer: Influencer) => {
+    // Use a combination of username and ID to get consistent photos for same influencer
+    const seed = influencer.username + influencer.id;
+    return `https://i.pravatar.cc/150?img=${Math.abs(seed.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 70}`;
+  };
+
+  // Real API call to fetch matched influencers
   const getMatchedInfluencers = async () => {
     const url = `https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/query`;
     try {
@@ -87,60 +114,6 @@ function MatchedInfluencers() {
       return null;
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Save outreach records to database
-  const saveOutreachRecords = async (selectedData: Influencer[], emailResults: any[], brandId: string) => {
-    try {
-      const outreachRecords: OutreachRecord[] = selectedData.map((influencer, index) => ({
-        campaign_id: campaignId,
-        influencer_id: influencer.id,
-        influencer_username: influencer.username,
-        influencer_email: influencer.email,
-        influencer_followers: influencer.followers,
-        brand_id: brandId,
-        email_subject: emailResults[index]?.subject || 'Partnership Opportunity',
-        email_body: emailResults[index]?.body || 'Partnership opportunity email',
-        status: 'sent' as const,
-        sent_at: new Date().toISOString(),
-      }));
-
-      console.log('Attempting to save outreach records:', outreachRecords);
-      const { data, error } = await supabase
-        .from('outreach')
-        .insert(outreachRecords)
-        .select();
-
-      if (error) {
-        console.error('Error saving outreach records to Supabase:', error);
-        throw error;
-      } else {
-        console.log('Outreach records successfully saved to Supabase:', data);
-      }
-
-      console.log('Checking campaign ID for update:', campaignId);
-      // Update campaign status to 'active' if it was 'draft'
-      if (campaignId) {
-        const { error: campaignError } = await supabase
-          .from('campaign')
-          .update({ 
-            status: 'active',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', campaignId);
-
-        if (campaignError) {
-          console.error('Error updating campaign status in Supabase:', campaignError);
-        } else {
-          console.log(`Campaign ${campaignId} status updated to 'active' in Supabase.`);
-        }
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Error in saveOutreachRecords:', error);
-      throw error;
     }
   };
 
@@ -273,72 +246,112 @@ function MatchedInfluencers() {
   }, [campaignId, query, limit]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-100 via-blue-50 to-green-50 p-6">
+    <div className="min-h-screen bg-white dark:bg-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Demo Banner */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-xl mb-6 text-center">
-          <p className="font-semibold">🚀 Live Mode - Real influencer data from API</p>
-          {campaignId && (
-            <p className="text-sm mt-1 opacity-90">Continue campaign setup for: {campaignInfo}</p>
-          )}
-        </div>
-
-        {/* Main Container */}
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-4 min-h-[700px]">
-            {/* Left Sidebar - Summary & Controls */}
-            <div className="lg:col-span-1 bg-gradient-to-br from-gray-900 via-purple-900 to-blue-900 p-8 relative overflow-hidden">
-              {/* Background Effects */}
-              <div className="absolute inset-0">
-                <div className="absolute top-20 left-20 w-32 h-32 border border-purple-500/30 rotate-45 rounded-xl"></div>
-                <div className="absolute bottom-20 right-20 w-24 h-24 border border-blue-500/30 rotate-12 rounded-lg"></div>
-                <div className="absolute top-1/2 left-10 w-4 h-4 bg-green-400 rounded-full"></div>
-                <div className="absolute bottom-1/3 left-1/3 w-8 h-8 bg-purple-500/50 rounded-full"></div>
+        {/* Header */}
+        <motion.div
+          className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div>
+            <div className="flex items-center mb-4">
+              <div className="w-8 h-8 mr-3">
+                <img 
+                  src="https://assets.influencerflow.in/logos/png/if-bg-w.png" 
+                  alt="InfluencerFlow Logo" 
+                  className="w-full h-full object-contain" 
+                />
               </div>
+              <span className="font-mono text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+                InfluencerFlow.in
+              </span>
+            </div>
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-2 tracking-tight">
+              AI-Matched Creators
+            </h1>
+            <p className="font-mono text-sm text-slate-600 dark:text-slate-400">
+              // {query ? `Results for: "${query}"` : 'AI-powered creator discovery'}
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {campaignId && (
+              <Badge variant="outline" className="font-mono">
+                Campaign {campaignId}
+              </Badge>
+            )}
+            
+            <HoverBorderGradient
+              containerClassName="rounded-lg"
+              as="button"
+              className="bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex items-center px-4 py-2 text-sm font-mono transition-colors border border-slate-200 dark:border-slate-700"
+              onClick={goBackToDashboard}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              back_to_dashboard()
+            </HoverBorderGradient>
+          </div>
+        </motion.div>
 
-              <div className="relative z-10 text-white h-full flex flex-col">
-                {/* Logo */}
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Sidebar - Analytics & Controls */}
+          <motion.div
+            className="lg:col-span-1"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
+            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 sticky top-6">
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
+                campaign_metrics() {"{"}
+              </div>
+              
+              <div className="space-y-6 pl-4">
+                {/* Search Results */}
+                <div>
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                      <Search className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900 dark:text-slate-100">Search Results</h3>
+                    </div>
                   </div>
-                  <span className="text-xl font-bold">InfluencerFlow</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 text-center">
+                      <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                        {influencers.length}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-400 font-mono">found</div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 text-center">
+                      <div className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                        {selectedInfluencers.size}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-400 font-mono">selected</div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Search Summary */}
-                <div className="mb-8">
-                  <h2 className="text-2xl font-bold mb-4">Search Results</h2>
-                  {query && (
-                    <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/20 mb-4">
-                      <p className="text-white/70 text-sm mb-1">Query:</p>
-                      <p className="font-semibold truncate">"{query}"</p>
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-3 bg-white/10 rounded-xl backdrop-blur-sm">
-                      <div className="text-2xl font-bold text-blue-300">{influencers.length}</div>
-                      <div className="text-xs text-white/70">Found</div>
-                    </div>
-                    <div className="text-center p-3 bg-white/10 rounded-xl backdrop-blur-sm">
-                      <div className="text-2xl font-bold text-purple-300">{selectedInfluencers.size}</div>
-                      <div className="text-xs text-white/70">Selected</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Selection Summary */}
+                {/* Campaign Reach */}
                 {selectedInfluencers.size > 0 && (
-                  <div className="mb-8">
-                    <h3 className="text-lg font-bold mb-3">Campaign Reach</h3>
-                    <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/20">
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-blue-300 mb-2">
-                          {formatFollowers(calculateTotalReach())}
-                        </div>
-                        <div className="text-sm text-white/70">Total Potential Reach</div>
+                  <div>
+                    <div className="flex items-center space-x-3 mb-3">
+                      <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-blue-500 rounded-lg flex items-center justify-center">
+                        <TrendingUp className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900 dark:text-slate-100">Total Reach</h3>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400 mb-1">
+                        {formatFollowers(calculateTotalReach())}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-400 font-mono">
+                        potential impressions
                       </div>
                     </div>
                   </div>
@@ -346,238 +359,261 @@ function MatchedInfluencers() {
 
                 {/* Action Buttons */}
                 {!loading && influencers.length > 0 && (
-                  <div className="mt-auto space-y-4">
-                    <button
+                  <div className="space-y-3">
+                    <HoverBorderGradient
+                      containerClassName="rounded-lg w-full"
+                      as="button"
+                      className="w-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono flex items-center justify-center px-4 py-3 text-sm font-medium border border-slate-200 dark:border-slate-700"
                       onClick={handleSelectAll}
-                      className="w-full bg-white/20 hover:bg-white/30 text-white py-3 rounded-xl font-semibold transition-all duration-200 border border-white/30"
                     >
-                      {selectedInfluencers.size === influencers.length ? 'Deselect All' : 'Select All'}
-                    </button>
+                      <Check className="w-4 h-4 mr-2" />
+                      {selectedInfluencers.size === influencers.length ? 'deselect_all()' : 'select_all()'}
+                    </HoverBorderGradient>
 
-                    <button
-                      onClick={handleOutreach}
-                      disabled={selectedInfluencers.size === 0 || isOutreaching}
-                      className={`w-full py-4 rounded-xl font-bold transition-all duration-200 flex items-center justify-center gap-3 ${
+                    <HoverBorderGradient
+                      containerClassName="rounded-lg w-full"
+                      as="button"
+                      className={`w-full font-mono flex items-center justify-center px-4 py-3 text-sm font-medium ${
                         selectedInfluencers.size > 0 && !isOutreaching
-                          ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg'
-                          : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                          ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
+                          : 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                       }`}
+                      onClick={selectedInfluencers.size > 0 && !isOutreaching ? handleOutreach : undefined}
                     >
                       {isOutreaching ? (
                         <>
-                          <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Sending Outreach...
+                          <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                          sending_outreach...
                         </>
                       ) : (
                         <>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                          Start Outreach ({selectedInfluencers.size})
+                          <Mail className="w-4 h-4 mr-2" />
+                          start_outreach({selectedInfluencers.size})
                         </>
                       )}
-                    </button>
-
-                    <button
-                      onClick={goBackToDashboard}
-                      className="w-full bg-white/10 hover:bg-white/20 text-white py-3 rounded-xl font-medium transition-all duration-200 border border-white/20"
-                    >
-                      Back to Dashboard
-                    </button>
+                    </HoverBorderGradient>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Main Content Area */}
-            <div className="lg:col-span-3 p-8">
-              {/* Header */}
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h1 className="text-4xl font-bold text-gray-900">
-                    Matched Influencers
-                  </h1>
-                  {campaignId && (
-                    <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-sm font-semibold">
-                      Campaign Mode
-                    </div>
-                  )}
-                </div>
-                <p className="text-gray-600">
-                  AI-powered influencer matching based on your campaign requirements.
-                </p>
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mt-4">
+                {"}"}
               </div>
+            </div>
+          </motion.div>
 
-              {/* Loading State */}
-              {loading && (
-                <div className="flex flex-col items-center justify-center py-16">
-                  <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 animate-pulse">
-                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                    Finding Perfect Matches
-                  </h3>
-                  <p className="text-gray-600 text-center max-w-md">
-                    Our AI is analyzing millions of creators to find the best influencers for your campaign
-                  </p>
-                  <div className="flex items-center gap-2 mt-6">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                    <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
-                  </div>
+          {/* Main Content */}
+          <div className="lg:col-span-3">
+            {/* Loading State */}
+            {loading && (
+              <motion.div
+                className="flex flex-col items-center justify-center py-16"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-6 animate-pulse">
+                  <Zap className="w-8 h-8 text-slate-600 dark:text-slate-400" />
                 </div>
-              )}
+                <h3 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                  AI Discovery in Progress
+                </h3>
+                <p className="text-slate-600 dark:text-slate-400 font-mono text-sm text-center max-w-md">
+                  // Analyzing millions of creators to find perfect matches for your campaign
+                </p>
+              </motion.div>
+            )}
 
-              {/* Error State */}
-              {error && !loading && (
-                <div className="text-center py-16">
-                  <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-md mx-auto">
-                    <div className="text-red-600 text-5xl mb-4">⚠️</div>
-                    <h3 className="text-xl font-bold text-red-900 mb-2">Something went wrong</h3>
-                    <p className="text-red-700 mb-6">{error}</p>
-                    <button
-                      onClick={() => getMatchedInfluencers()}
-                      className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all duration-200"
-                    >
-                      Try Again
-                    </button>
-                  </div>
-                </div>
-              )}
+            {/* Error State */}
+            {error && !loading && (
+              <motion.div
+                className="flex justify-center py-16"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                <Alert className="max-w-md border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/10">
+                  <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  <AlertDescription className="text-red-800 dark:text-red-200">
+                    {error}
+                  </AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
 
-              {/* Results */}
-              {!loading && !error && (
-                <div>
-                  {influencers.length > 0 ? (
-                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                      {influencers.map((influencer, index) => {
-                        const isSelected = selectedInfluencers.has(influencer.id);
-                        return (
-                          <div
-                            key={influencer.id || index}
-                            className={`p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer ${
-                              isSelected
-                                ? 'bg-blue-50 border-blue-300 shadow-lg'
-                                : 'bg-gray-50 border-gray-200 hover:bg-white hover:shadow-md'
-                            }`}
-                            onClick={() => handleInfluencerSelection(influencer.id)}
-                          >
-                            <div className="flex items-start gap-4">
-                              {/* Selection Indicator */}
-                              <div className="flex-shrink-0 mt-1">
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                                  isSelected 
-                                    ? 'bg-blue-600 border-blue-600' 
-                                    : 'border-gray-300 hover:border-blue-400'
-                                }`}>
-                                  {isSelected && (
-                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  )}
-                                </div>
+            {/* Results */}
+            {!loading && !error && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              >
+                {influencers.length > 0 ? (
+                  <div className="space-y-4">
+                    {influencers.map((influencer, index) => {
+                      const isSelected = selectedInfluencers.has(influencer.id);
+                      const matchScore = 85 + Math.floor(Math.random() * 15);
+                      
+                      return (
+                        <HoverBorderGradient
+                          key={influencer.id || index}
+                          containerClassName="rounded-2xl"
+                          as="div"
+                          className={`bg-white dark:bg-slate-800 p-6 cursor-pointer transition-all duration-300 ${
+                            isSelected ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/10' : ''
+                          }`}
+                          onClick={() => handleInfluencerSelection(influencer.id)}
+                        >
+                          <div className="flex items-start gap-6">
+                            {/* Selection Checkbox */}
+                            <div className="flex-shrink-0 mt-2">
+                              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                isSelected 
+                                  ? 'bg-blue-600 border-blue-600' 
+                                  : 'border-slate-300 dark:border-slate-600 hover:border-blue-400'
+                              }`}>
+                                {isSelected && (
+                                  <Check className="w-3 h-3 text-white" />
+                                )}
                               </div>
+                            </div>
 
-                              {/* Avatar */}
-                              <div className="flex-shrink-0">
-                                <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold">
+                            {/* Profile Photo */}
+                            <div className="flex-shrink-0">
+                              <div className="relative">
+                                <img
+                                  src={getProfilePhoto(influencer)}
+                                  alt={influencer.username}
+                                  className="w-16 h-16 rounded-2xl object-cover"
+                                  onError={(e) => {
+                                    // Fallback to gradient avatar if image fails
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    target.nextElementSibling!.classList.remove('hidden');
+                                  }}
+                                />
+                                <div className="hidden w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl items-center justify-center text-white text-xl font-bold">
                                   {influencer.username.charAt(0).toUpperCase()}
                                 </div>
+                                {isSelected && (
+                                  <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                                    <Check className="w-3 h-3 text-white" />
+                                  </div>
+                                )}
                               </div>
+                            </div>
 
-                              {/* Content */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div>
-                                    <h3 className="text-xl font-bold text-gray-900 mb-1">
-                                      {influencer.username}
-                                    </h3>
-                                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                                      <span className="flex items-center gap-1">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                        </svg>
-                                        {formatFollowers(influencer.followers)} followers
-                                      </span>
-                                      <span className="flex items-center gap-1">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                        </svg>
-                                        {influencer.email}
-                                      </span>
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between mb-3">
+                                <div>
+                                  <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                                    {influencer.username}
+                                  </h3>
+                                  <div className="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+                                    <div className="flex items-center gap-1">
+                                      <Users className="w-4 h-4" />
+                                      <span className="font-mono">{formatFollowers(influencer.followers)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Mail className="w-4 h-4" />
+                                      <span className="font-mono">{influencer.email}</span>
                                     </div>
                                   </div>
-                                  
+                                </div>
+                                
+                                <div className="flex items-center gap-2">
+                                  <Badge 
+                                    variant={matchScore >= 90 ? 'default' : 'secondary'}
+                                    className="font-mono text-xs"
+                                  >
+                                    {matchScore}% match
+                                  </Badge>
                                   {isSelected && (
-                                    <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium">
+                                    <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:bg-blue-900/10">
+                                      <CheckCircle className="w-3 h-3 mr-1" />
                                       Selected
-                                    </div>
+                                    </Badge>
                                   )}
                                 </div>
+                              </div>
 
-                                <p className="text-gray-700 mb-4 leading-relaxed line-clamp-2">
-                                  {influencer.bio}
-                                </p>
+                              <p className="text-slate-700 dark:text-slate-300 mb-4 leading-relaxed">
+                                {influencer.bio}
+                              </p>
 
-                                <div className="flex items-center justify-between">
-                                  <a
-                                    href={influencer.link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 font-medium text-sm"
-                                  >
-                                    View Profile
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                    </svg>
-                                  </a>
-
-                                  {/* Match score indicator */}
-                                  <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-medium">
-                                    {85 + Math.floor(Math.random() * 15)}% match
+                              {/* Stats Row */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-slate-500">
+                                  <div className="flex items-center gap-1">
+                                    <Eye className="w-4 h-4" />
+                                    <span className="font-mono">{(influencer.followers * 0.05).toFixed(0)} avg views</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Heart className="w-4 h-4" />
+                                    <span className="font-mono">{((influencer.followers * 0.05) * 0.08).toFixed(0)} avg likes</span>
                                   </div>
                                 </div>
+
+                                <a 
+                                  href={influencer.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                >
+                                  <HoverBorderGradient
+                                    containerClassName="rounded-lg"
+                                    className="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 flex items-center px-3 py-2 text-sm font-mono transition-colors"
+                                  >
+                                    view_profile()
+                                    <ExternalLink className="w-3 h-3 ml-2" />
+                                  </HoverBorderGradient>
+                                </a>
                               </div>
                             </div>
                           </div>
-                        );
-                      })}
+                        </HoverBorderGradient>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <motion.div
+                    className="text-center py-16"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <div className="text-6xl mb-6">🔍</div>
+                    <h3 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-4">
+                      No Creators Found
+                    </h3>
+                    <p className="text-slate-600 dark:text-slate-400 font-mono text-sm mb-8 max-w-md mx-auto">
+                      // No creators match your search criteria. Try adjusting your query parameters.
+                    </p>
+                    <div className="flex gap-4 justify-center">
+                      <HoverBorderGradient
+                        containerClassName="rounded-lg"
+                        as="button"
+                        className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center px-6 py-3 text-sm font-medium"
+                        onClick={() => window.location.reload()}
+                      >
+                        <Search className="w-4 h-4 mr-2" />
+                        retry_search()
+                      </HoverBorderGradient>
+                      <HoverBorderGradient
+                        containerClassName="rounded-lg"
+                        as="button"
+                        className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono flex items-center px-6 py-3 text-sm font-medium border border-slate-200 dark:border-slate-700"
+                        onClick={goBackToDashboard}
+                      >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        back_to_dashboard()
+                      </HoverBorderGradient>
                     </div>
-                  ) : (
-                    <div className="text-center py-16">
-                      <div className="text-6xl mb-6">🔍</div>
-                      <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                        No influencers found
-                      </h3>
-                      <p className="text-gray-600 text-lg mb-8 max-w-md mx-auto">
-                        We couldn't find any creators matching your search criteria. 
-                        Try adjusting your query or creating a new campaign.
-                      </p>
-                      <div className="flex gap-4 justify-center">
-                        <button
-                          onClick={() => window.location.reload()}
-                          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
-                        >
-                          Try New Search
-                        </button>
-                        <button
-                          onClick={goBackToDashboard}
-                          className="bg-gray-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-gray-700 transition-all duration-200"
-                        >
-                          Back to Dashboard
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
@@ -586,3 +622,7 @@ function MatchedInfluencers() {
 }
 
 export default MatchedInfluencers;
+
+function saveOutreachRecords(selectedData: Influencer[], arg1: any, id: string) {
+  throw new Error("Function not implemented.");
+}
