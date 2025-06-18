@@ -235,8 +235,8 @@ module.exports = class UserController {
         // ... handle other actions in the future ...
       }
 
-      // Fallback to previous logic for hi/onboarding
-      if (text.toLowerCase() === "hi") {
+      // Restore onboarding/registered user logic for 'hi' text
+      if (text && text.toLowerCase() === "hi") {
         // Check brands table for contact_num
         const { data, error } = await supabase
           .from("brands")
@@ -264,11 +264,9 @@ module.exports = class UserController {
             .status(200)
             .json({ reply: "You are not registered with us. Please sign up." });
         }
-      } else {
-        // Ignore other messages for now
-        return res.status(200).send("Ignored");
       }
 
+      // Fallback
       return res.status(200).send("No action taken");
     } catch (error) {
       res.status(500).json({ error: error.message || "Unknown error" });
