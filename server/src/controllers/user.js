@@ -25,6 +25,7 @@ module.exports = class UserController {
   // POST for WhatsApp webhook
   async handleWebhook(req, res) {
     try {
+      console.log('Webhook hit', req.body);
       // Meta's Cloud API payload structure
       const entry = req.body.entry && req.body.entry[0];
       const changes = entry && entry.changes && entry.changes[0];
