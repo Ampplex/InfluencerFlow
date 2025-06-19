@@ -111,7 +111,10 @@ async function sendWhatsappListMessage(to, name) {
 async function fetchMatchedInfluencers(query) {
   const url =
     "https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/query";
-  const response = await axios.post(url, { query, k: 10 });
+  const response = await axios.post(url, {
+    query: JSON.stringify(query),
+    k: 10,
+  });
   return response.data && response.data.influencers
     ? response.data.influencers
     : [];
