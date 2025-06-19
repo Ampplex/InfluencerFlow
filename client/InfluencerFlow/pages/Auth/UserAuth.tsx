@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Eye, EyeOff, Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Building2, Mail } from "lucide-react";
+import supabase from '../../utils/supabase';
 
 interface LoginForm {
   email: string;
@@ -216,6 +217,11 @@ export function UserLogin() {
             refresh_token: result.user.refreshToken,
             user: result.user
           }));
+          // Set Supabase session for global auth state
+          await supabase.auth.setSession({
+            access_token: result.user.accessToken,
+            refresh_token: result.user.refreshToken,
+          });
         }
         
         setTimeout(() => {
@@ -265,6 +271,11 @@ export function UserLogin() {
             refresh_token: result.user.refreshToken,
             user: result.user
           }));
+          // Set Supabase session for global auth state
+          await supabase.auth.setSession({
+            access_token: result.user.accessToken,
+            refresh_token: result.user.refreshToken,
+          });
         }
         
         setTimeout(() => {
@@ -342,6 +353,11 @@ export function UserLogin() {
               refresh_token: result.user.refreshToken,
               user: result.user
             }));
+            // Set Supabase session for global auth state
+            await supabase.auth.setSession({
+              access_token: result.user.accessToken,
+              refresh_token: result.user.refreshToken,
+            });
           }
           
           setTimeout(() => {
