@@ -157,11 +157,31 @@ async function sendInfluencerSelectionList(to, influencers) {
     );
   }
   const url = `https://graph.facebook.com/v22.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  const rows = influencers.slice(0, 10).map((inf, idx) => ({
-    id: `influencer_${inf.id}`,
-    title: inf.username,
-    description: `${inf.followers} followers${inf.bio ? " - " + inf.bio : ""}`,
-  }));
+
+  // Section-based pagination: up to 10 sections, each with up to 10 rows (max 100 influencers)
+  const maxInfluencers = 100;
+  const maxRowsPerSection = 10;
+  const maxSections = 10;
+  const limitedInfluencers = influencers.slice(0, maxInfluencers);
+  const sections = [];
+  for (
+    let i = 0;
+    i < limitedInfluencers.length && sections.length < maxSections;
+    i += maxRowsPerSection
+  ) {
+    const page = limitedInfluencers.slice(i, i + maxRowsPerSection);
+    sections.push({
+      title: `Page ${Math.floor(i / maxRowsPerSection) + 1}`,
+      rows: page.map((inf) => ({
+        id: `influencer_${inf.id}`,
+        title: inf.username,
+        description: `${inf.followers} followers${
+          inf.bio ? " - " + inf.bio : ""
+        }`,
+      })),
+    });
+  }
+
   const data = {
     messaging_product: "whatsapp",
     to,
@@ -170,18 +190,16 @@ async function sendInfluencerSelectionList(to, influencers) {
       type: "list",
       header: { type: "text", text: "Select an influencer:" },
       body: { text: "Choose one influencer to proceed." },
-      footer: { text: "You can only select one at a time." },
+      footer: {
+        text: "You can only select one at a time. Showing up to 100 results.",
+      },
       action: {
         button: "Select influencer",
-        sections: [
-          {
-            title: "Influencers",
-            rows,
-          },
-        ],
+        sections,
       },
     },
   };
+
   await axios.post(url, data, {
     headers: {
       Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
@@ -197,20 +215,8 @@ module.exports = class UserController {
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
     if (mode && token && mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("Webhook verify hit", {
-        mode,
-        token,
-        challenge,
-        VERIFY_TOKEN,
-      });
       res.status(200).send(challenge);
     } else {
-      console.log("Webhook verify failed", {
-        mode,
-        token,
-        challenge,
-        VERIFY_TOKEN,
-      });
       res.status(403).send("Verification failed");
     }
   }
@@ -218,15 +224,11 @@ module.exports = class UserController {
   // POST for WhatsApp webhook
   async handleWebhook(req, res) {
     try {
-      // Debug: log the incoming payload
-      console.log("Webhook payload:", JSON.stringify(req.body, null, 2));
-
       const entry = req.body.entry && req.body.entry[0];
       const changes = entry && entry.changes && entry.changes[0];
       const value = changes && changes.value;
       const messages = value && value.messages;
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        console.log("No messages found in payload.");
         return res.status(200).send("No messages");
       }
       const message = messages[0];
@@ -234,16 +236,6 @@ module.exports = class UserController {
       const text =
         message.text && message.text.body && message.text.body.trim();
       const interactive = message.interactive;
-
-      // Debug: log extracted values
-      console.log(
-        "Extracted phoneNumber:",
-        phoneNumber,
-        "text:",
-        text,
-        "interactive:",
-        !!interactive
-      );
 
       // If user is in the middle of campaign creation, continue the flow
       if (phoneNumber && campaignSessions[phoneNumber]) {
@@ -282,9 +274,16 @@ module.exports = class UserController {
               phoneNumber,
               "Thanks! Finding matching influencers for your campaign..."
             );
+            console.log(
+              "[INFLUENCER_API] Request payload:",
+              JSON.stringify(session.data, null, 2)
+            );
             try {
               const influencers = await fetchMatchedInfluencers(session.data);
-              console.log("Influencer API response:", influencers);
+              console.log(
+                "[INFLUENCER_API] Response:",
+                JSON.stringify(influencers, null, 2)
+              );
               if (!Array.isArray(influencers)) {
                 await sendWhatsappTextMessage(
                   phoneNumber,
@@ -303,10 +302,14 @@ module.exports = class UserController {
                 session.awaitingInfluencerSelection = true;
               }
             } catch (err) {
-              console.error(
-                "Influencer API error:",
-                err.response ? err.response.data : err.message
-              );
+              if (err.response) {
+                console.error(
+                  "[INFLUENCER_API] Error response:",
+                  JSON.stringify(err.response.data, null, 2)
+                );
+              } else {
+                console.error("[INFLUENCER_API] Error:", err.message);
+              }
               await sendWhatsappTextMessage(
                 phoneNumber,
                 "Sorry, there was an error fetching influencers. Please try again later."
@@ -393,7 +396,6 @@ module.exports = class UserController {
       }
 
       // Fallback
-      console.log("No action taken for this message.");
       return res.status(200).send("No action taken");
     } catch (error) {
       res.status(500).json({ error: error.message || "Unknown error" });
