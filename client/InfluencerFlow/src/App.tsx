@@ -440,7 +440,7 @@ function AppContent() {
 
         {/* Shared Protected Routes - Accessible by both user types */}
         <Route 
-          path="/negotiation/:campaignId/:influencerId" 
+          path="/negotiation-chat/:campaign_id/:email" 
           element={
             <ProtectedRoute 
               isLoggedIn={isLoggedIn} 
@@ -526,7 +526,7 @@ function AppContent() {
         <Route path="/auth/influencer" element={<Navigate to="/auth?tab=influencer" replace />} />
         
         {/* 404 - Must be last */}
-        <Route path="*" element={<NotFound />} />
+        {/* <Route path="*" element={<NotFound />} /> */}
       </Routes>
     </>
   );
