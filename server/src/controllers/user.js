@@ -220,7 +220,7 @@ module.exports = class UserController {
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
     if (mode && token && mode === "subscribe" && token === VERIFY_TOKEN) {
-      res.status(200).send(challenge);
+      res.status(200).send(challenge);  
     } else {
       res.status(403).send("Verification failed");
     }
