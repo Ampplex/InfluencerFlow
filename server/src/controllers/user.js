@@ -193,9 +193,7 @@ async function sendInfluencerSelectionList(to, influencers) {
       type: "list",
       header: { type: "text", text: "Select an influencer:" },
       body: { text: "Choose one influencer to proceed." },
-      footer: {
-        text: "You can only select one at a time. Showing up to 100 results.",
-      },
+      footer: { text: "Select one influencer." },
       action: {
         button: "Select influencer",
         sections,
