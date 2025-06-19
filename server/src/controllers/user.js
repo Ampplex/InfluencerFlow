@@ -175,13 +175,17 @@ async function sendInfluencerSelectionList(to, influencers) {
     const page = limitedInfluencers.slice(i, i + maxRowsPerSection);
     sections.push({
       title: `Page ${Math.floor(i / maxRowsPerSection) + 1}`,
-      rows: page.map((inf) => ({
-        id: `influencer_${inf.id}`,
-        title: inf.username,
-        description: `${inf.followers} followers${
+      rows: page.map((inf) => {
+        let desc = `${inf.followers} followers${
           inf.bio ? " - " + inf.bio : ""
-        }`,
-      })),
+        }`;
+        if (desc.length > 72) desc = desc.slice(0, 69) + "...";
+        return {
+          id: `influencer_${inf.id}`,
+          title: inf.username,
+          description: desc,
+        };
+      }),
     });
   }
 
