@@ -4,7 +4,6 @@ import supabase from '../utils/supabase';
 import { motion } from 'framer-motion';
 import { getCurrentUserId, upsertInfluencerProfile, logOnboardingError, PlatformLink } from './onboardingUtils';
 import { 
-  User, 
   Phone, 
   Instagram, 
   Youtube, 

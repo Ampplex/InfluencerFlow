@@ -1,13 +1,39 @@
-// api/user-auth.ts - Clean Vercel Edge Function (single version)
+// api/user-auth.ts - Working Vercel port of your Netlify function
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Use service role key for admin operations
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+console.log('=== ENVIRONMENT VARIABLES DEBUG ===');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('SUPABASE_URL (direct):', process.env.SUPABASE_URL ? 'Set ✓' : 'Missing ❌');
+console.log('VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL ? 'Set ✓' : 'Missing ❌');
+console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Set ✓' : 'Missing ❌');
+
+// Show first/last 10 characters of keys for verification (don't show full keys)
+if (process.env.SUPABASE_URL) {
+  console.log('SUPABASE_URL preview:', 
+    process.env.SUPABASE_URL.substring(0, 20) + '...' + 
+    process.env.SUPABASE_URL.substring(process.env.SUPABASE_URL.length - 10)
+  );
+}
+
+if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log('SERVICE_KEY preview:', 
+    process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) + '...' + 
+    process.env.SUPABASE_SERVICE_ROLE_KEY.substring(process.env.SUPABASE_SERVICE_ROLE_KEY.length - 10)
+  );
+} else {
+  console.log('❌ SUPABASE_SERVICE_ROLE_KEY is completely missing!');
+}
+
+console.log('=== END DEBUG ===');
+
+// Supabase client setup (equivalent to your lib/supabase.ts)
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://eepxrnqcefpvzxqkpjaw.supabase.co';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('Missing Supabase environment variables');
+  throw new Error('Missing Supabase environment variables. Need SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -17,6 +43,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   }
 });
 
+// Type definitions (same as your Netlify version)
 interface InvitationLoginRequest {
   action: 'verify-invitation';
   email: string;
@@ -47,6 +74,13 @@ interface InfluencerSignupRequest {
   phoneNum: string;
 }
 
+
+interface PasswordResetRequest {
+  action: 'reset-password';
+  email: string;
+  userType: 'brand' | 'influencer';
+}
+
 interface VerifyEmailRequest {
   action: 'verify-email';
   email: string;
@@ -58,7 +92,7 @@ interface ResendVerificationRequest {
   email: string;
 }
 
-type AuthRequest = InvitationLoginRequest | EmailLoginRequest | PasswordSetupRequest | InfluencerSignupRequest | VerifyEmailRequest | ResendVerificationRequest;
+type AuthRequest = InvitationLoginRequest | EmailLoginRequest | PasswordSetupRequest | InfluencerSignupRequest | VerifyEmailRequest | ResendVerificationRequest | PasswordResetRequest;
 
 interface AuthResponse {
   success: boolean;
@@ -80,23 +114,28 @@ interface AuthResponse {
   error?: string;
 }
 
-// CORS headers for Vercel
+// CORS headers (adapted for Vercel)
 const getCorsHeaders = (origin: string | undefined) => {
   const allowedOrigins = [
-    'https://app.influencerflow.in',
     'https://influencerflow.in',
     'https://www.influencerflow.in',
-    'http://localhost:5173'
+    'https://app.influencerflow.in'
   ];
   
   const isDev = process.env.NODE_ENV === 'development';
   if (isDev) {
-    allowedOrigins.push('http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173');
+    allowedOrigins.push(
+      'http://localhost:3000', 
+      'http://localhost:8888', 
+      'http://localhost:5173',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173'
+    );
   }
   
   const allowedOrigin = origin && allowedOrigins.some(allowed => 
     origin.includes(allowed.replace('https://', '').replace('http://', ''))
-  ) ? origin : 'https://app.influencerflow.in';
+  ) ? origin : 'https://influencerflow.in';
 
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
@@ -117,16 +156,132 @@ const generateVerificationCode = (): string => {
   return result;
 };
 
+
+
+const handlePasswordReset = async (email: string, userType: 'brand' | 'influencer'): Promise<AuthResponse> => {
+  try {
+    console.log(`Processing password reset for ${userType}: ${email}`);
+
+    // First, verify the user exists and get their info
+    let userExists = false;
+    let userName = '';
+
+    if (userType === 'brand') {
+      // Check if brand exists in early_access_requests
+      const { data: brandData, error: brandError } = await supabase
+        .from('early_access_requests')
+        .select('name, email, status, password_setup_completed')
+        .eq('email', email.toLowerCase())
+        .single();
+
+      if (brandError) {
+        console.log('Brand lookup error:', brandError.message);
+      }
+
+      if (brandData && brandData.password_setup_completed) {
+        userExists = true;
+        userName = brandData.name;
+      }
+    } else {
+      // Check if influencer exists
+      const { data: influencerData, error: influencerError } = await supabase
+        .from('influencers')
+        .select('influencer_username, influencer_email')
+        .eq('influencer_email', email.toLowerCase())
+        .single();
+
+      if (influencerError) {
+        console.log('Influencer lookup error:', influencerError.message);
+      }
+
+      if (influencerData) {
+        userExists = true;
+        userName = influencerData.influencer_username;
+      }
+    }
+
+    if (!userExists) {
+      return {
+        success: false,
+        error: `No ${userType} account found with this email address. Please check your email or sign up for a new account.`
+      };
+    }
+
+    // Determine the correct redirect URL based on environment
+    let redirectUrl: string;
+    
+    // Check environment and set appropriate redirect URL
+    if (process.env.NODE_ENV === 'development') {
+      redirectUrl = `http://localhost:3000/auth/reset-password?type=${userType}`;
+    } else {
+      // For production, use your actual domain
+      redirectUrl = `https://app.influencerflow.in/auth/reset-password?type=${userType}`;
+    }
+
+    console.log('Using redirect URL:', redirectUrl);
+
+    // Use Supabase's built-in password reset functionality
+    const { error } = await supabase.auth.resetPasswordForEmail(email.toLowerCase(), {
+      redirectTo: redirectUrl
+    });
+
+    if (error) {
+      console.error('Password reset error:', error);
+      
+      // Handle specific error cases
+      if (error.message?.includes('not found')) {
+        return {
+          success: false,
+          error: 'No account found with this email address. Please check your email or sign up.'
+        };
+      }
+      
+      if (error.message?.includes('rate limit')) {
+        return {
+          success: false,
+          error: 'Too many password reset attempts. Please wait a few minutes before trying again.'
+        };
+      }
+      
+      return {
+        success: false,
+        error: 'Failed to send password reset email. Please try again or contact support.'
+      };
+    }
+
+    console.log(`Password reset email sent successfully to ${email}`);
+
+    return {
+      success: true,
+      user: {
+        email: email.toLowerCase(),
+        name: userName,
+        userType: userType,
+        requiresPasswordSetup: false,
+        accountActivated: true
+      }
+    };
+
+  } catch (error) {
+    console.error('Error processing password reset:', error);
+    return {
+      success: false,
+      error: 'Failed to process password reset request. Please try again.'
+    };
+  }
+};
+
+
 // Send email verification code using Brevo
 const sendVerificationEmail = async (email: string, username: string, verificationCode: string) => {
-  const brevoApiKey = process.env.VITE_BREVO_API_KEY || process.env.BREVO_API_KEY || 'jZUJyTOtwYsWS26R';
+  const brevoApiKey = process.env.VITE_BREVO_API_KEY || process.env.BREVO_API_KEY;
   if (!brevoApiKey) {
     throw new Error('Brevo API key not configured');
   }
 
   const emailData = {
     sender: {
-      name: "InfluencerFlow Verification",
+      name: "Team InfluencerFlow AI",
       email: "verify@influencerflow.in"
     },
     replyTo: {
@@ -281,7 +436,7 @@ const sendVerificationEmail = async (email: string, username: string, verificati
   return await response.json();
 };
 
-// Verify invitation code (only for brands)
+// Verify invitation code (your working Netlify logic)
 const verifyInvitationCode = async (email: string, code: string, userType: 'brand' | 'influencer'): Promise<AuthResponse> => {
   try {
     if (userType !== 'brand') {
@@ -313,6 +468,29 @@ const verifyInvitationCode = async (email: string, code: string, userType: 'bran
       .single();
 
     if (inviteError || !invitation) {
+      console.log('Invalid invitation code:', { email, code, error: inviteError });
+      
+      const { data: expiredInvite } = await supabase
+        .from('invitation_codes')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .eq('code', code.toUpperCase())
+        .single();
+
+      if (expiredInvite) {
+        if (expiredInvite.used) {
+          return {
+            success: false,
+            error: 'This invitation code has already been used. Please contact support if you need a new code.'
+          };
+        } else {
+          return {
+            success: false,
+            error: 'This invitation code has expired. Please contact support for a new code.'
+          };
+        }
+      }
+
       return {
         success: false,
         error: 'Invalid invitation code. Please check your email for the correct 6-character code.'
@@ -350,6 +528,8 @@ const verifyInvitationCode = async (email: string, code: string, userType: 'bran
       };
     }
 
+    console.log(`Invitation code verified for ${email}`);
+
     return {
       success: true,
       user: {
@@ -371,7 +551,7 @@ const verifyInvitationCode = async (email: string, code: string, userType: 'bran
   }
 };
 
-// Influencer signup with email verification
+
 const handleInfluencerSignup = async (
   email: string, 
   password: string, 
@@ -436,11 +616,11 @@ const handleInfluencerSignup = async (
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email.toLowerCase(),
       password: password,
-      email_confirm: false, // Don't auto-confirm - require verification
+      email_confirm: false,
       user_metadata: {
         username: username.trim(),
         userType: 'influencer',
-        account_activated: false, // Not activated until email verified
+        account_activated: false,
         created_via: 'influencer_signup',
         password_set_at: new Date().toISOString()
       }
@@ -494,7 +674,6 @@ const handleInfluencerSignup = async (
     let verificationCode: string;
     let codeExists = true;
     
-    // Ensure code is unique
     do {
       verificationCode = generateVerificationCode();
       const { data: existingCode } = await supabase
@@ -514,7 +693,7 @@ const handleInfluencerSignup = async (
         email: email.toLowerCase(),
         code: verificationCode,
         user_id: authData.user.id,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes
+        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         used: false
       });
 
@@ -539,8 +718,8 @@ const handleInfluencerSignup = async (
         username: username.trim(),
         userType: 'influencer',
         requiresPasswordSetup: false,
-        accountActivated: false, // Not activated until email verified
-        emailVerificationRequired: true // Flag for frontend
+        accountActivated: false,
+        emailVerificationRequired: true
       }
     };
 
@@ -553,7 +732,244 @@ const handleInfluencerSignup = async (
   }
 };
 
-// Email verification
+const handleEmailLogin = async (email: string, password: string, userType: 'brand' | 'influencer'): Promise<AuthResponse> => {
+  try {
+    console.log(`Attempting ${userType} login for ${email}`);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.toLowerCase(),
+      password: password
+    });
+
+    if (error || !data.user) {
+      console.error('Login error:', error);
+      return {
+        success: false,
+        error: 'Invalid email or password. Please check your credentials and try again.'
+      };
+    }
+
+    // Verify user type matches
+    const userMetaType = data.user.user_metadata?.userType;
+    if (userMetaType && userMetaType !== userType) {
+      return {
+        success: false,
+        error: `This account is registered as a ${userMetaType}. Please use the correct login tab.`
+      };
+    }
+
+    let userName = '';
+    let brandName = '';
+    let username = '';
+
+    if (userType === 'brand') {
+      // Get brand info from early_access_requests
+      const { data: brandData } = await supabase
+        .from('early_access_requests')
+        .select('name, brand')
+        .eq('email', email.toLowerCase())
+        .single();
+      
+      userName = brandData?.name || '';
+      brandName = brandData?.brand || '';
+    } else {
+      // Get influencer info
+      const { data: influencerData } = await supabase
+        .from('influencers')
+        .select('influencer_username')
+        .eq('influencer_email', email.toLowerCase())
+        .single();
+      
+      username = influencerData?.influencer_username || data.user.user_metadata?.username || '';
+    }
+
+    console.log(`${userType} login successful for ${email}`);
+
+    return {
+      success: true,
+      user: {
+        id: data.user.id,
+        email: data.user.email || '',
+        name: userName,
+        brand: brandName,
+        username: username,
+        userType: userType,
+        requiresPasswordSetup: false,
+        accessToken: data.session?.access_token,
+        refreshToken: data.session?.refresh_token,
+        accountActivated: true
+      }
+    };
+  } catch (error) {
+    console.error('Email login error:', error);
+    return {
+      success: false,
+      error: 'Login failed. Please try again.'
+    };
+  }
+};
+
+const handlePasswordSetup = async (email: string, password: string, userType: 'brand' | 'influencer'): Promise<AuthResponse> => {
+  try {
+    console.log(`Setting up password for ${userType}: ${email}`);
+
+    if (userType !== 'brand') {
+      return {
+        success: false,
+        error: 'Password setup is only for brand accounts with invitations.'
+      };
+    }
+
+    // Validate password
+    if (password.length < 8) {
+      return {
+        success: false,
+        error: 'Password must be at least 8 characters long'
+      };
+    }
+
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    
+    if (!hasUppercase || !hasNumber) {
+      return {
+        success: false,
+        error: 'Password must contain at least one uppercase letter and one number'
+      };
+    }
+
+    // Get user info from early_access_requests
+    const { data: userRequest, error: userError } = await supabase
+      .from('early_access_requests')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .eq('status', 'approved')
+      .single();
+
+    if (userError || !userRequest) {
+      console.error('User request not found:', userError);
+      return {
+        success: false,
+        error: 'User account not found or not approved. Please contact support.'
+      };
+    }
+
+    if (userRequest.password_setup_completed) {
+      return {
+        success: false,
+        error: 'Account already activated. Please use the regular login form.'
+      };
+    }
+
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: email.toLowerCase(),
+      password: password,
+      email_confirm: true,
+      user_metadata: {
+        name: userRequest.name,
+        brand: userRequest.brand,
+        userType: 'brand',
+        requires_password_setup: false,
+        account_activated: true,
+        invitation_signup: true,
+        created_via: 'invitation_flow',
+        password_set_at: new Date().toISOString()
+      }
+    });
+
+    if (authError) {
+      console.error('Failed to create user in Supabase Auth:', authError);
+      
+      if (authError.message?.includes('already registered') || authError.message?.includes('already exists')) {
+        return {
+          success: false,
+          error: 'An account with this email already exists. Try logging in instead.'
+        };
+      }
+      
+      return {
+        success: false,
+        error: `Failed to create account: ${authError.message}`
+      };
+    }
+
+    // Create brand profile
+    const { error: brandError } = await supabase
+      .from('brands')
+      .insert({
+        id: authData.user.id,
+        brand_name: userRequest.brand,
+        brand_description: null,
+        location: null,
+        created_at: new Date().toISOString()
+      });
+
+    if (brandError) {
+      console.error('Failed to create brand profile:', brandError);
+    }
+
+    // Update early_access_requests
+    const { error: requestUpdateError } = await supabase
+      .from('early_access_requests')
+      .update({
+        password_setup_completed: true,
+        activated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('email', email.toLowerCase());
+
+    if (requestUpdateError) {
+      console.error('Failed to update early access request:', requestUpdateError);
+    }
+
+    // Auto-login
+    let accessToken: string | undefined;
+    let refreshToken: string | undefined;
+
+    try {
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase(),
+        password: password
+      });
+
+      if (signInError) {
+        console.error('Auto-login error:', signInError);
+      } else if (signInData.session) {
+        accessToken = signInData.session.access_token;
+        refreshToken = signInData.session.refresh_token;
+      }
+    } catch (signInError) {
+      console.error('Failed to auto-login after password setup:', signInError);
+    }
+
+    console.log(`Password setup completed for ${email}`);
+
+    return {
+      success: true,
+      user: {
+        id: authData.user.id,
+        email: email.toLowerCase(),
+        name: userRequest.name,
+        brand: userRequest.brand,
+        userType: 'brand',
+        requiresPasswordSetup: false,
+        accessToken,
+        refreshToken,
+        accountActivated: true
+      }
+    };
+
+  } catch (error) {
+    console.error('Error setting up password:', error);
+    return {
+      success: false,
+      error: 'Failed to set up password. Please try again.'
+    };
+  }
+};
+
+// Email verification function (from your Netlify version)
 const handleEmailVerification = async (email: string, code: string): Promise<AuthResponse> => {
   try {
     console.log(`Verifying email for ${email}`);
@@ -664,7 +1080,7 @@ const handleEmailVerification = async (email: string, code: string): Promise<Aut
   }
 };
 
-// Resend verification code
+// Resend verification code function (from your Netlify version)
 const handleResendVerification = async (email: string): Promise<AuthResponse> => {
   try {
     console.log(`Resending verification code for ${email}`);
@@ -730,7 +1146,7 @@ const handleResendVerification = async (email: string): Promise<AuthResponse> =>
         email: email.toLowerCase(),
         code: verificationCode,
         user_id: influencerData.id,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes
+        expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         used: false
       });
 
@@ -768,257 +1184,14 @@ const handleResendVerification = async (email: string): Promise<AuthResponse> =>
   }
 };
 
-// Regular email/password login
-const handleEmailLogin = async (email: string, password: string, userType: 'brand' | 'influencer'): Promise<AuthResponse> => {
-  try {
-    console.log(`Attempting ${userType} login for ${email}`);
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase(),
-      password: password
-    });
-
-    if (error || !data.user) {
-      console.error('Login error:', error);
-      return {
-        success: false,
-        error: 'Invalid email or password. Please check your credentials and try again.'
-      };
-    }
-
-    // Verify user type matches
-    const userMetaType = data.user.user_metadata?.userType;
-    if (userMetaType && userMetaType !== userType) {
-      return {
-        success: false,
-        error: `This account is registered as a ${userMetaType}. Please use the correct login tab.`
-      };
-    }
-
-    let userName = '';
-    let brandName = '';
-    let username = '';
-
-    if (userType === 'brand') {
-      // Get brand info from early_access_requests
-      const { data: brandData } = await supabase
-        .from('early_access_requests')
-        .select('name, brand')
-        .eq('email', email.toLowerCase())
-        .single();
-      
-      userName = brandData?.name || '';
-      brandName = brandData?.brand || '';
-    } else {
-      // Get influencer info
-      const { data: influencerData } = await supabase
-        .from('influencers')
-        .select('influencer_username')
-        .eq('influencer_email', email.toLowerCase())
-        .single();
-      
-      username = influencerData?.influencer_username || data.user.user_metadata?.username || '';
-    }
-
-    console.log(`${userType} login successful for ${email}`);
-
-    return {
-      success: true,
-      user: {
-        id: data.user.id,
-        email: data.user.email || '',
-        name: userName,
-        brand: brandName,
-        username: username,
-        userType: userType,
-        requiresPasswordSetup: false,
-        accessToken: data.session?.access_token,
-        refreshToken: data.session?.refresh_token,
-        accountActivated: true
-      }
-    };
-  } catch (error) {
-    console.error('Email login error:', error);
-    return {
-      success: false,
-      error: 'Login failed. Please try again.'
-    };
-  }
-};
-
-// Password setup for brands after invitation verification
-const handlePasswordSetup = async (email: string, password: string, userType: 'brand' | 'influencer'): Promise<AuthResponse> => {
-  try {
-    console.log(`Setting up password for ${userType}: ${email}`);
-
-    if (userType !== 'brand') {
-      return {
-        success: false,
-        error: 'Password setup is only for brand accounts with invitations.'
-      };
-    }
-
-    // Validate password
-    if (password.length < 8) {
-      return {
-        success: false,
-        error: 'Password must be at least 8 characters long'
-      };
-    }
-
-    const hasUppercase = /[A-Z]/.test(password);
-    const hasNumber = /[0-9]/.test(password);
-    
-    if (!hasUppercase || !hasNumber) {
-      return {
-        success: false,
-        error: 'Password must contain at least one uppercase letter and one number'
-      };
-    }
-
-    // Get user info from early_access_requests
-    const { data: userRequest, error: userError } = await supabase
-      .from('early_access_requests')
-      .select('*')
-      .eq('email', email.toLowerCase())
-      .eq('status', 'approved')
-      .single();
-
-    if (userError || !userRequest) {
-      console.error('User request not found:', userError);
-      return {
-        success: false,
-        error: 'User account not found or not approved. Please contact support.'
-      };
-    }
-
-    if (userRequest.password_setup_completed) {
-      return {
-        success: false,
-        error: 'Account already activated. Please use the regular login form.'
-      };
-    }
-
-    // Create user in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: email.toLowerCase(),
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        name: userRequest.name,
-        brand: userRequest.brand,
-        userType: 'brand',
-        requires_password_setup: false,
-        account_activated: true,
-        invitation_signup: true,
-        created_via: 'invitation_flow',
-        password_set_at: new Date().toISOString()
-      }
-    });
-
-    if (authError) {
-      console.error('Failed to create user in Supabase Auth:', authError);
-      
-      if (authError.message?.includes('already registered') || authError.message?.includes('already exists')) {
-        return {
-          success: false,
-          error: 'An account with this email already exists. Try logging in instead.'
-        };
-      }
-      
-      return {
-        success: false,
-        error: `Failed to create account: ${authError.message}`
-      };
-    }
-
-    console.log('Supabase Auth user created successfully:', authData.user.id);
-
-    // Create brand profile
-    const { error: brandError } = await supabase
-      .from('brands')
-      .insert({
-        id: authData.user.id, // Use the auth user ID
-        brand_name: userRequest.brand,
-        brand_description: null,
-        location: null,
-        created_at: new Date().toISOString()
-      });
-
-    if (brandError) {
-      console.error('Failed to create brand profile:', brandError);
-      // Don't fail the whole operation for this
-    }
-
-    // Update early_access_requests
-    const { error: requestUpdateError } = await supabase
-      .from('early_access_requests')
-      .update({
-        password_setup_completed: true,
-        activated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('email', email.toLowerCase());
-
-    if (requestUpdateError) {
-      console.error('Failed to update early access request:', requestUpdateError);
-    }
-
-    // Auto-login
-    let accessToken: string | undefined;
-    let refreshToken: string | undefined;
-
-    try {
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase(),
-        password: password
-      });
-
-      if (signInError) {
-        console.error('Auto-login error:', signInError);
-      } else if (signInData.session) {
-        accessToken = signInData.session.access_token;
-        refreshToken = signInData.session.refresh_token;
-      }
-    } catch (signInError) {
-      console.error('Failed to auto-login after password setup:', signInError);
-    }
-
-    console.log(`Password setup completed for ${email}`);
-
-    return {
-      success: true,
-      user: {
-        id: authData.user.id,
-        email: email.toLowerCase(),
-        name: userRequest.name,
-        brand: userRequest.brand,
-        userType: 'brand',
-        requiresPasswordSetup: false,
-        accessToken,
-        refreshToken,
-        accountActivated: true
-      }
-    };
-
-  } catch (error) {
-    console.error('Error setting up password:', error);
-    return {
-      success: false,
-      error: 'Failed to set up password. Please try again.'
-    };
-  }
-};
-
-// Main API handler for Vercel
+// Main Vercel handler (adapted from your Netlify handler)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('User auth function invoked:', {
     method: req.method,
     timestamp: new Date().toISOString()
   });
 
-  const origin = req.headers.origin as string | undefined;
-  const headers = getCorsHeaders(origin);
+  const headers = getCorsHeaders(req.headers.origin as string);
 
   // Set CORS headers
   Object.entries(headers).forEach(([key, value]) => {
@@ -1030,7 +1203,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({
       success: false,
@@ -1039,6 +1211,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Parse request body (Vercel difference from Netlify)
     const requestBody = req.body as AuthRequest;
 
     if (!requestBody.action) {
@@ -1128,6 +1301,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           requestBody.bio || '',
           requestBody.phoneNum || ''
         );
+        break;
+
+
+        case 'reset-password':
+        if (!requestBody.userType || !['brand', 'influencer'].includes(requestBody.userType)) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Valid user type is required for password reset' 
+          });
+        }
+
+        result = await handlePasswordReset(requestBody.email.trim(), requestBody.userType);
         break;
 
       case 'verify-email':

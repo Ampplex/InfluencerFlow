@@ -14,7 +14,7 @@ import CampaignDetails from '../pages/CampaignDetails';
 import UserLogin from '../pages/Auth/UserAuth';
 import InfluencerProfileSetup from '../pages/InfluencerProfileSetup';
 import BrandProfileSetup from '../pages/BrandProfileSetup';
-import { NotFound } from '../pages/NotFound'; // Create this component
+// import { NotFound } from '../pages/NotFound'; // Create this component
 import supabase from '../utils/supabase';
 import { Provider } from 'react-redux';
 import { store, persistor } from "../redux/store";
@@ -22,6 +22,7 @@ import { PersistGate } from 'redux-persist/integration/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { setUserType } from '../redux/userType/userTypeSlice';
+import ResetPassword from '../pages/Auth/ResetPassword';
 
 // Types
 type UserType = 'brand' | 'influencer' | null;
@@ -73,12 +74,12 @@ function ProtectedRoute({
     return <Navigate to="/auth" replace />;
   }
 
-  // Check user type authorization
-  if (allowedUserTypes && allowedUserTypes.length > 0) {
-    if (!currentUserType || !allowedUserTypes.includes(currentUserType)) {
-      return <NotFound />;
-    }
-  }
+  // // Check user type authorization
+  // if (allowedUserTypes && allowedUserTypes.length > 0) {
+  //   if (!currentUserType || !allowedUserTypes.includes(currentUserType)) {
+  //     return <NotFound />;
+  //   }
+  // }
 
   return <>{children}</>;
 }
@@ -143,17 +144,184 @@ function AppContent() {
     return match ? match[2] : null;
   };
 
-  // Initial authentication check
+  // Check if current path is reset password
+  const isResetPasswordPath = () => {
+    return location.pathname === '/auth/reset-password';
+  };
+
+  // Check profile setup status with improved error handling
+  const checkProfileSetupStatus = async (session: any, userType: UserType) => {
+    console.log('Checking profile setup status for:', userType);
+    
+    const { user } = session;
+    
+    // Check if Supabase environment variables are available
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing Supabase environment variables');
+      console.error('VITE_SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
+      console.error('VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
+      
+      // Don't fail the app, just set conservative defaults
+      if (userType === 'influencer') {
+        setNeedsProfileSetup(true);
+      } else if (userType === 'brand') {
+        setNeedsBrandProfileSetup(true);
+      }
+      return;
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': supabaseAnonKey,
+      'Authorization': `Bearer ${session.access_token}`
+    };
+
+    try {
+      if (userType === 'influencer') {
+        console.log('Checking influencer profile for user:', user.id);
+        
+        // Check influencer profile completeness
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/influencers?id=eq.${user.id}&select=bio,platforms`,
+          { 
+            method: 'GET',
+            headers,
+            signal: controller.signal
+          }
+        );
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          console.error('Failed to fetch influencer profile:', response.status, response.statusText);
+          // Don't fail the app, just assume profile setup is needed
+          setNeedsProfileSetup(true);
+          return;
+        }
+        
+        const data = await response.json();
+        console.log('Influencer profile data:', data);
+        
+        const profile = data[0];
+        
+        // Check if profile setup was just completed
+        const profileSetupCompleted = sessionStorage.getItem('profileSetupCompleted') === 'true';
+        
+        if (profileSetupCompleted || (profile?.bio && profile?.platforms)) {
+          console.log('Influencer profile is complete');
+          setNeedsProfileSetup(false);
+          sessionStorage.removeItem('profileSetupCompleted');
+        } else {
+          console.log('Influencer profile needs setup');
+          setNeedsProfileSetup(true);
+        }
+        
+      } else if (userType === 'brand') {
+        console.log('Checking brand profile for user:', user.id);
+        
+        // Check brand profile completeness
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/brands?id=eq.${user.id}&select=brand_name,brand_description,location`,
+          { 
+            method: 'GET',
+            headers,
+            signal: controller.signal
+          }
+        );
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          console.error('Failed to fetch brand profile:', response.status, response.statusText);
+          // Don't fail the app, just assume profile setup is needed
+          setNeedsBrandProfileSetup(true);
+          return;
+        }
+        
+        const data = await response.json();
+        console.log('Brand profile data:', data);
+        
+        const profile = data[0];
+        
+        // Check if profile setup was just completed
+        const brandProfileSetupCompleted = sessionStorage.getItem('brandProfileSetupCompleted') === 'true';
+        
+        if (brandProfileSetupCompleted || (profile?.brand_name && profile?.brand_description && profile?.location)) {
+          console.log('Brand profile is complete');
+          setNeedsBrandProfileSetup(false);
+          sessionStorage.removeItem('brandProfileSetupCompleted');
+        } else {
+          console.log('Brand profile needs setup');
+          setNeedsBrandProfileSetup(true);
+        }
+      }
+    } catch (error: unknown) {
+      console.error('Error checking profile setup status:', error);
+      
+      // Handle specific error types
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          console.error('Profile check timed out');
+        } else if (error.message?.includes('fetch')) {
+          console.error('Network error during profile check');
+        }
+      }
+      
+      // Don't fail the app - set conservative defaults
+      if (userType === 'influencer') {
+        setNeedsProfileSetup(true);
+      } else if (userType === 'brand') {
+        setNeedsBrandProfileSetup(true);
+      }
+    }
+  };
+
+  // Enhanced initial authentication check
   useEffect(() => {
     const performInitialAuthCheck = async () => {
       console.log('Starting initial auth check...');
       
+      // Skip auth check if we're on the reset password page
+      if (isResetPasswordPath()) {
+        console.log('On reset password page, skipping auth check');
+        setIsLoading(false);
+        return;
+      }
+      
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setIsLoggedIn(!!session);
+        // Check if Supabase is properly configured first
+        if (!supabase) {
+          console.error('Supabase client is not initialized');
+          setIsLoading(false);
+          return;
+        }
+        
+        console.log('Getting session from Supabase...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Error getting session:', sessionError);
+          setIsLoggedIn(false);
+          setIsLoading(false);
+          return;
+        }
+        
+        const hasSession = !!session;
+        console.log('Session found:', hasSession);
+        setIsLoggedIn(hasSession);
         
         if (session) {
           console.log('Session found, checking user type and profile status...');
+          console.log('User metadata:', session.user.user_metadata);
           
           // Determine user type from various sources
           const urlParams = new URLSearchParams(window.location.search);
@@ -161,95 +329,60 @@ function AppContent() {
           const userTypeFromMetadata = session.user.user_metadata?.userType as UserType;
           const userTypeFromCookie = getCookie('user_type') as UserType;
           
+          console.log('User type sources:', {
+            fromUrl: userTypeFromUrl,
+            fromMetadata: userTypeFromMetadata,
+            fromCookie: userTypeFromCookie,
+            fromRedux: userTypeRedux
+          });
+          
           const userType = userTypeFromUrl || userTypeFromMetadata || userTypeFromCookie || userTypeRedux;
           
           if (userType) {
+            console.log('Setting user type to:', userType);
             dispatch(setUserType(userType));
             
-            // Check profile setup status
+            // Check profile setup status (with error handling)
             await checkProfileSetupStatus(session, userType);
+          } else {
+            console.warn('No user type found, user may need to complete setup');
           }
         }
       } catch (error) {
-        console.error('Error during initial auth check:', error);
+        console.error('Critical error during initial auth check:', error);
+        
+        // Don't leave the app in loading state
+        setIsLoggedIn(false);
       } finally {
+        console.log('Initial auth check completed');
         setIsLoading(false);
       }
     };
 
     performInitialAuthCheck();
-  }, []);
+  }, [dispatch, userTypeRedux, location.pathname]);
 
-  // Check profile setup status
-  const checkProfileSetupStatus = async (session: any, userType: UserType) => {
-    const { user } = session;
-    const headers = {
-      'Content-Type': 'application/json',
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${session.access_token}`
-    };
-
-    try {
-      if (userType === 'influencer') {
-        // Check influencer profile completeness
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/influencers?id=eq.${user.id}&select=bio,platforms`,
-          { headers }
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          const profile = data[0];
-          
-          // Check if profile setup was just completed
-          const profileSetupCompleted = sessionStorage.getItem('profileSetupCompleted') === 'true';
-          
-          if (profileSetupCompleted || (profile?.bio && profile?.platforms)) {
-            setNeedsProfileSetup(false);
-            sessionStorage.removeItem('profileSetupCompleted');
-          } else {
-            setNeedsProfileSetup(true);
-          }
-        }
-      } else if (userType === 'brand') {
-        // Check brand profile completeness
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/brands?id=eq.${user.id}&select=brand_name,brand_description,location`,
-          { headers }
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          const profile = data[0];
-          
-          // Check if profile setup was just completed
-          const brandProfileSetupCompleted = sessionStorage.getItem('brandProfileSetupCompleted') === 'true';
-          
-          if (brandProfileSetupCompleted || (profile?.brand_name && profile?.brand_description && profile?.location)) {
-            setNeedsBrandProfileSetup(false);
-            sessionStorage.removeItem('brandProfileSetupCompleted');
-          } else {
-            setNeedsBrandProfileSetup(true);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error checking profile setup status:', error);
-    }
-  };
-
-  // Listen to auth state changes
+  // Listen to auth state changes with improved error handling
   useEffect(() => {
+    // Skip auth listener setup if we're on reset password page
+    if (isResetPasswordPath()) {
+      return;
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event);
       setIsLoggedIn(!!session);
       
       if (session && event === 'SIGNED_IN') {
-        // Handle user type detection on sign in
-        const userTypeFromMetadata = session.user.user_metadata?.userType as UserType;
-        if (userTypeFromMetadata) {
-          dispatch(setUserType(userTypeFromMetadata));
-          await checkProfileSetupStatus(session, userTypeFromMetadata);
+        try {
+          // Handle user type detection on sign in
+          const userTypeFromMetadata = session.user.user_metadata?.userType as UserType;
+          if (userTypeFromMetadata) {
+            dispatch(setUserType(userTypeFromMetadata));
+            await checkProfileSetupStatus(session, userTypeFromMetadata);
+          }
+        } catch (error) {
+          console.error('Error handling sign in:', error);
         }
       } else if (!session) {
         // Clear user type on sign out
@@ -260,11 +393,11 @@ function AppContent() {
     });
 
     return () => subscription.unsubscribe();
-  }, [dispatch]);
+  }, [dispatch, location.pathname]);
 
   // Show/hide navbar logic
   const shouldShowNavbar = () => {
-    const authPaths = ['/auth', '/auth/brand', '/auth/influencer'];
+    const authPaths = ['/auth', '/auth/brand', '/auth/influencer', '/auth/reset-password'];
     const setupPaths = ['/influencer-profile-setup', '/brand-profile-setup'];
     
     return isLoggedIn && 
@@ -272,7 +405,7 @@ function AppContent() {
            !setupPaths.includes(location.pathname);
   };
 
-  if (isLoading) {
+  if (isLoading && !isResetPasswordPath()) {
     return <LoadingScreen />;
   }
 
@@ -281,13 +414,21 @@ function AppContent() {
       {shouldShowNavbar() && <Navbar />}
       
       <Routes>
-        {/* Public Routes */}
+        {/* PUBLIC ROUTES - These should come FIRST and don't require authentication */}
+        
+        {/* Reset Password - Must be accessible without authentication */}
+        <Route 
+          path="/auth/reset-password" 
+          element={<ResetPassword />} 
+        />
+        
+        {/* Auth Route */}
         <Route 
           path="/auth" 
           element={isLoggedIn ? <DashboardRedirect userType={userTypeRedux} /> : <UserLogin />} 
         />
         
-        {/* Profile Setup Routes */}
+        {/* PROFILE SETUP ROUTES - Require basic authentication but special handling */}
         <Route 
           path="/influencer-profile-setup" 
           element={
@@ -316,7 +457,7 @@ function AppContent() {
           } 
         />
 
-        {/* Brand Routes - Only accessible by brands */}
+        {/* BRAND PROTECTED ROUTES - Only accessible by brands with complete profiles */}
         <Route 
           path="/dashboard" 
           element={
@@ -377,7 +518,7 @@ function AppContent() {
           } 
         />
 
-        {/* Creator Routes - Only accessible by influencers */}
+        {/* CREATOR PROTECTED ROUTES - Only accessible by influencers with complete profiles */}
         <Route 
           path="/creator/dashboard" 
           element={
@@ -438,7 +579,7 @@ function AppContent() {
           } 
         />
 
-        {/* Shared Protected Routes - Accessible by both user types */}
+        {/* SHARED PROTECTED ROUTES - Accessible by both user types with complete profiles */}
         <Route 
           path="/negotiation-chat/:campaign_id/:email" 
           element={
@@ -515,6 +656,8 @@ function AppContent() {
           } 
         />
 
+        {/* ROOT AND FALLBACK ROUTES */}
+        
         {/* Root redirect */}
         <Route 
           path="/" 

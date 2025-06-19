@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
-import { Eye, EyeOff, Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Building2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Building2, Mail } from "lucide-react";
 
 interface LoginForm {
   email: string;
@@ -21,8 +21,8 @@ interface LoginForm {
 }
 
 type UserType = 'brand' | 'influencer';
-type LoginMode = 'invitation' | 'existing-user' | 'influencer-signup';
-type LoginStep = 'choose-mode' | 'invitation-entry' | 'password-setup' | 'email-login' | 'influencer-signup' | 'email-verification' | 'complete';
+type LoginMode = 'invitation' | 'existing-user' | 'influencer-signup' | 'forgot-password';
+type LoginStep = 'choose-mode' | 'invitation-entry' | 'password-setup' | 'email-login' | 'influencer-signup' | 'email-verification' | 'forgot-password' | 'complete';
 
 interface UserInfo {
   email: string;
@@ -61,6 +61,9 @@ export function UserLogin() {
   const [loginMode, setLoginMode] = useState<LoginMode>('invitation');
   const [step, setStep] = useState<LoginStep>('choose-mode');
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+
+  // Password reset specific states
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   // Handle URL parameters and routes
   useEffect(() => {
@@ -119,6 +122,7 @@ export function UserLogin() {
     });
     setError(null);
     setSuccess(null);
+    setResetSuccess(false);
     
     // Always go to choose-mode when manually switching tabs
     setStep('choose-mode');
@@ -324,21 +328,27 @@ export function UserLogin() {
 
       if (result.success) {
         setUserInfo(result.user);
-        setStep('complete');
-        setSuccess('Account created successfully! Redirecting to your dashboard...');
         
-        if (result.user?.accessToken) {
-          localStorage.setItem('supabase.auth.token', JSON.stringify({
-            access_token: result.user.accessToken,
-            refresh_token: result.user.refreshToken,
-            user: result.user
-          }));
+        if (result.user?.emailVerificationRequired) {
+          setStep('email-verification');
+          setSuccess('Account created! Please check your email for a verification code.');
+        } else {
+          setStep('complete');
+          setSuccess('Account created successfully! Redirecting to your dashboard...');
+          
+          if (result.user?.accessToken) {
+            localStorage.setItem('supabase.auth.token', JSON.stringify({
+              access_token: result.user.accessToken,
+              refresh_token: result.user.refreshToken,
+              user: result.user
+            }));
+          }
+          
+          setTimeout(() => {
+            // Route to creator dashboard
+            window.location.href = '/creator/dashboard';
+          }, 2000);
         }
-        
-        setTimeout(() => {
-          // Route to creator dashboard
-          window.location.href = '/creator/dashboard';
-        }, 2000);
       } else {
         setError(result.error || 'Failed to create account. Please try again.');
       }
@@ -411,6 +421,45 @@ export function UserLogin() {
     }
   };
 
+  // NEW: Password reset functionality
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!form.email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/user-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reset-password',
+          email: form.email.trim().toLowerCase(),
+          userType
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setResetSuccess(true);
+        setSuccess('Password reset email sent! Check your inbox for instructions.');
+        setError(null);
+      } else {
+        setError(result.error || 'Failed to send reset email. Please try again.');
+      }
+    } catch (err) {
+      setError('Failed to send reset email. Please check your internet connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRequestAccess = () => {
     window.location.href = '/early-access';
   };
@@ -432,6 +481,7 @@ export function UserLogin() {
     setUserInfo(null);
     setError(null);
     setSuccess(null);
+    setResetSuccess(false);
   };
 
   const getPasswordStrength = () => {
@@ -548,6 +598,7 @@ export function UserLogin() {
               {step === 'email-login' && `${userType === 'brand' ? 'Brand' : 'Creator'} Sign In`}
               {step === 'influencer-signup' && 'Join as Creator'}
               {step === 'email-verification' && 'Verify Your Email'}
+              {step === 'forgot-password' && 'Reset Password'}
               {step === 'complete' && 'Access Granted'}
             </h1>
             
@@ -558,6 +609,7 @@ export function UserLogin() {
               {step === 'email-login' && '// Login with existing credentials'}
               {step === 'influencer-signup' && '// Create your creator account'}
               {step === 'email-verification' && '// Enter the 6-digit code from your email'}
+              {step === 'forgot-password' && '// Enter your email to reset password'}
               {step === 'complete' && '// Redirecting to dashboard...'}
             </p>
           </div>
@@ -576,112 +628,18 @@ export function UserLogin() {
                   setStep('invitation-entry');
                 } else if (step === 'email-verification') {
                   setStep('influencer-signup');
+                } else if (step === 'forgot-password') {
+                  setStep('email-login');
                 }
                 setError(null);
                 setSuccess(null);
+                setResetSuccess(false);
               }}
             >
               <ArrowLeft className="w-4 h-4 mr-1" />
               <span>back()</span>
             </HoverBorderGradient>
           )}
-
-          {/* Email Verification */}
-          {step === 'email-verification' && (
-            <div className="space-y-6">
-              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
-                verify_email() {"{"}
-              </div>
-              
-              <div className="space-y-4 pl-4">
-                <div>
-                  <Label htmlFor="display-email-verification" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Email Address
-                  </Label>
-                  <Input
-                    id="display-email-verification"
-                    type="email"
-                    value={userInfo?.email || form.email}
-                    disabled
-                    className="mt-1 bg-slate-50 dark:bg-slate-800 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="verificationCode" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Verification Code
-                  </Label>
-                  <Input
-                    id="verificationCode"
-                    type="text"
-                    value={form.verificationCode}
-                    onChange={(e) => setForm(prev => ({ 
-                      ...prev, 
-                      verificationCode: e.target.value.replace(/[^0-9]/g, '') 
-                    }))}
-                    className="mt-1 font-mono text-center text-xl tracking-[0.3em] font-bold"
-                    placeholder="123456"
-                    maxLength={6}
-                    required
-                  />
-                  <p className="mt-1 text-xs text-slate-500 font-mono">
-                    // 6-digit code from your email
-                  </p>
-                </div>
-
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={handleResendVerification}
-                    disabled={loading}
-                    className="text-sm font-mono text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline hover:no-underline disabled:opacity-50"
-                  >
-                    {loading ? 'sending...' : 'resend_code()'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
-                {"}"}
-              </div>
-
-              <HoverBorderGradient
-                containerClassName="rounded-xl w-full"
-                as="button"
-                className={`w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center justify-center px-6 py-3 text-base font-medium ${
-                  loading || form.verificationCode.length !== 6 
-                    ? 'opacity-50 cursor-not-allowed' 
-                    : ''
-                }`}
-                onClick={(e: React.FormEvent) => {
-                  if (loading || form.verificationCode.length !== 6) return;
-                  handleEmailVerification(e);
-                }}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    verifying...
-                  </>
-                ) : (
-                  'verify_email()'
-                )}
-              </HoverBorderGradient>
-
-              {/* Help section */}
-              <div className="border-l-2 border-slate-200 dark:border-slate-700 pl-4 mt-6">
-                <p className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-2">
-                  // Can't find your verification code?
-                </p>
-                <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1 font-mono">
-                  <div>• Check spam/junk folder</div>
-                  <div>• Look for verify@influencerflow.in</div>
-                  <div>• Code expires in 15 minutes</div>
-                  <div>• Contact support@influencerflow.in</div>
-                </div>
-              </div>
-            </div>
-            )}
 
           {/* Error Alert */}
           {error && (
@@ -900,6 +858,223 @@ export function UserLogin() {
                   'verify_code()'
                 )}
               </HoverBorderGradient>
+            </div>
+          )}
+
+          {/* Email/Password Login */}
+          {step === 'email-login' && (
+            <div className="space-y-6">
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
+                authenticate() {"{"}
+              </div>
+              
+              <div className="space-y-4 pl-4">
+                <div>
+                  <Label htmlFor="login-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Email Address
+                  </Label>
+                  <Input
+                    id="login-email"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))}
+                    className="mt-1 font-mono"
+                    placeholder={userType === 'brand' ? 'your.email@company.com' : 'you@email.com'}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="login-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Password
+                  </Label>
+                  <div className="mt-1 relative">
+                    <Input
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))}
+                      className="pr-10 font-mono"
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-slate-400" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-slate-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
+                {"}"}
+              </div>
+
+              <HoverBorderGradient
+                containerClassName="rounded-xl w-full"
+                as="button"
+                className={`w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center justify-center px-6 py-3 text-base font-medium ${
+                  loading || !form.email || !form.password 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : ''
+                }`}
+                onClick={loading || !form.email || !form.password ? undefined : handleEmailPasswordLogin}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    signing_in...
+                  </>
+                ) : (
+                  'login()'
+                )}
+              </HoverBorderGradient>
+
+              {/* Forgot Password Link */}
+              <div className="text-center space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep('forgot-password');
+                    setLoginMode('forgot-password');
+                    setResetSuccess(false);
+                  }}
+                  className="font-mono text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline hover:no-underline"
+                >
+                  forgot_password()
+                </button>
+                
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {userType === 'brand' ? 'First time here?' : 'New influencer?'}{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (userType === 'brand') {
+                        setLoginMode('invitation');
+                        setStep('invitation-entry');
+                      } else {
+                        setLoginMode('influencer-signup');
+                        setStep('influencer-signup');
+                      }
+                    }}
+                    className="font-mono font-medium text-slate-900 dark:text-slate-100 underline hover:no-underline"
+                  >
+                    {userType === 'brand' ? 'use_invitation()' : 'create_account()'}
+                  </button>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* NEW: Forgot Password Step */}
+          {step === 'forgot-password' && (
+            <div className="space-y-6">
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
+                reset_password() {"{"}
+              </div>
+
+              {resetSuccess ? (
+                <div className="space-y-4 pl-4">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-green-50 dark:bg-green-900/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Mail className="w-8 h-8 text-green-600 dark:text-green-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-2">
+                      Reset Email Sent!
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                      We've sent password reset instructions to <strong>{form.email}</strong>
+                    </p>
+                    <div className="text-xs text-slate-500 dark:text-slate-600 font-mono space-y-1">
+                      <p>• Check your email inbox</p>
+                      <p>• Look for an email from Supabase</p>
+                      <p>• Click the reset link in the email</p>
+                      <p>• Link expires in 1 hour</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 pl-4">
+                  <div>
+                    <Label htmlFor="reset-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Email Address
+                    </Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))}
+                      className="mt-1 font-mono"
+                      placeholder={userType === 'brand' ? 'your.email@company.com' : 'you@email.com'}
+                      required
+                    />
+                    <p className="mt-1 text-xs text-slate-500 font-mono">
+                      // Enter the email for your {userType} account
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
+                {"}"}
+              </div>
+
+              {!resetSuccess && (
+                <HoverBorderGradient
+                  containerClassName="rounded-xl w-full"
+                  as="button"
+                  className={`w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center justify-center px-6 py-3 text-base font-medium ${
+                    loading || !form.email.trim()
+                      ? 'opacity-50 cursor-not-allowed' 
+                      : ''
+                  }`}
+                  onClick={loading || !form.email.trim() ? undefined : handlePasswordReset}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      sending_reset_email...
+                    </>
+                  ) : (
+                    'send_reset_email()'
+                  )}
+                </HoverBorderGradient>
+              )}
+
+              {resetSuccess && (
+                <HoverBorderGradient
+                  containerClassName="rounded-xl w-full"
+                  as="button"
+                  className="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono flex items-center justify-center px-6 py-3 text-base font-medium border border-slate-200 dark:border-slate-700"
+                  onClick={() => {
+                    setStep('email-login');
+                    setLoginMode('existing-user');
+                    setResetSuccess(false);
+                  }}
+                >
+                  back_to_login()
+                </HoverBorderGradient>
+              )}
+
+              {/* Help section */}
+              <div className="border-l-2 border-slate-200 dark:border-slate-700 pl-4 mt-6">
+                <p className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-2">
+                  // Need help?
+                </p>
+                <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1 font-mono">
+                  <div>• Check spam/junk folder</div>
+                  <div>• Reset link expires in 1 hour</div>
+                  <div>• Only works for existing accounts</div>
+                  <div>• Contact support@influencerflow.in</div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1132,6 +1307,103 @@ export function UserLogin() {
             </div>
           )}
 
+          {/* Email Verification */}
+          {step === 'email-verification' && (
+            <div className="space-y-6">
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
+                verify_email() {"{"}
+              </div>
+              
+              <div className="space-y-4 pl-4">
+                <div>
+                  <Label htmlFor="display-email-verification" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Email Address
+                  </Label>
+                  <Input
+                    id="display-email-verification"
+                    type="email"
+                    value={userInfo?.email || form.email}
+                    disabled
+                    className="mt-1 bg-slate-50 dark:bg-slate-800 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="verificationCode" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Verification Code
+                  </Label>
+                  <Input
+                    id="verificationCode"
+                    type="text"
+                    value={form.verificationCode}
+                    onChange={(e) => setForm(prev => ({ 
+                      ...prev, 
+                      verificationCode: e.target.value.replace(/[^0-9]/g, '') 
+                    }))}
+                    className="mt-1 font-mono text-center text-xl tracking-[0.3em] font-bold"
+                    placeholder="123456"
+                    maxLength={6}
+                    required
+                  />
+                  <p className="mt-1 text-xs text-slate-500 font-mono">
+                    // 6-digit code from your email
+                  </p>
+                </div>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={loading}
+                    className="text-sm font-mono text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline hover:no-underline disabled:opacity-50"
+                  >
+                    {loading ? 'sending...' : 'resend_code()'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
+                {"}"}
+              </div>
+
+              <HoverBorderGradient
+                containerClassName="rounded-xl w-full"
+                as="button"
+                className={`w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center justify-center px-6 py-3 text-base font-medium ${
+                  loading || form.verificationCode.length !== 6 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : ''
+                }`}
+                onClick={(e: React.FormEvent) => {
+                  if (loading || form.verificationCode.length !== 6) return;
+                  handleEmailVerification(e);
+                }}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    verifying...
+                  </>
+                ) : (
+                  'verify_email()'
+                )}
+              </HoverBorderGradient>
+
+              {/* Help section */}
+              <div className="border-l-2 border-slate-200 dark:border-slate-700 pl-4 mt-6">
+                <p className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-2">
+                  // Can't find your verification code?
+                </p>
+                <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1 font-mono">
+                  <div>• Check spam/junk folder</div>
+                  <div>• Look for verify@influencerflow.in</div>
+                  <div>• Code expires in 15 minutes</div>
+                  <div>• Contact support@influencerflow.in</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Password Setup (same as before) */}
           {step === 'password-setup' && (
             <div className="space-y-6">
@@ -1304,105 +1576,6 @@ export function UserLogin() {
                   'activate_account()'
                 )}
               </HoverBorderGradient>
-            </div>
-          )}
-
-          {/* Email/Password Login */}
-          {step === 'email-login' && (
-            <div className="space-y-6">
-              <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-4">
-                authenticate() {"{"}
-              </div>
-              
-              <div className="space-y-4 pl-4">
-                <div>
-                  <Label htmlFor="login-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Email Address
-                  </Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm(prev => ({ ...prev, email: e.target.value }))}
-                    className="mt-1 font-mono"
-                    placeholder={userType === 'brand' ? 'your.email@company.com' : 'you@email.com'}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="login-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Password
-                  </Label>
-                  <div className="mt-1 relative">
-                    <Input
-                      id="login-password"
-                      type={showPassword ? "text" : "password"}
-                      value={form.password}
-                      onChange={(e) => setForm(prev => ({ ...prev, password: e.target.value }))}
-                      className="pr-10 font-mono"
-                      placeholder="••••••••"
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4 text-slate-400" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-slate-400" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
-                {"}"}
-              </div>
-
-              <HoverBorderGradient
-                containerClassName="rounded-xl w-full"
-                as="button"
-                className={`w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center justify-center px-6 py-3 text-base font-medium ${
-                  loading || !form.email || !form.password 
-                    ? 'opacity-50 cursor-not-allowed' 
-                    : ''
-                }`}
-                onClick={loading || !form.email || !form.password ? undefined : handleEmailPasswordLogin}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    signing_in...
-                  </>
-                ) : (
-                  'login()'
-                )}
-              </HoverBorderGradient>
-
-              <div className="text-center">
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {userType === 'brand' ? 'First time here?' : 'New influencer?'}{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (userType === 'brand') {
-                        setLoginMode('invitation');
-                        setStep('invitation-entry');
-                      } else {
-                        setLoginMode('influencer-signup');
-                        setStep('influencer-signup');
-                      }
-                    }}
-                    className="font-mono font-medium text-slate-900 dark:text-slate-100 underline hover:no-underline"
-                  >
-                    {userType === 'brand' ? 'use_invitation()' : 'create_account()'}
-                  </button>
-                </p>
-              </div>
             </div>
           )}
 
