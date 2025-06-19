@@ -900,7 +900,9 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                     const hasAnyCompletedDealForCampaign = campaignOutreachRecords.some(o => o.status === 'completed');
 
                     return (
-                      <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate(`/campaign/${campaign.id}`)}>
+                      <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer" onClick={() => {
+                        
+                      }}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{campaign.campaign_name}</h3>
@@ -985,6 +987,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                             <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium" onClick={() => {
                               navigate(`/matched-influencers/${campaign.id}`, {
                                 state: {
+                                  campaignId: campaign.id,
                                   query: campaign.campaign_name + ' ' + campaign.description,
                                   campaign_description: campaign.description,
                                   limit: 10,
@@ -1035,7 +1038,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleShowReport(campaign, outreach.influencer_id);
+                                            handleShowReport(campaign);
                                           }}
                                           className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
                                         >
@@ -1051,7 +1054,14 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                             <motion.button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/campaign/${campaign.id}`);
+                                navigate(`/matched-influencers/${campaign.id}`, {
+                                  state: {
+                                    campaignId: campaign.id,
+                                    query: campaign.campaign_name + ' ' + campaign.description,
+                                    campaign_description: campaign.description,
+                                    limit: 10,
+                                  },
+                                });
                               }}
                               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${actionButton.color}`}
                               whileHover={{ scale: 1.02 }}

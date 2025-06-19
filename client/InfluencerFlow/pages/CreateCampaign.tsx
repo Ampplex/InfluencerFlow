@@ -226,7 +226,7 @@ const CreateCampaign = () => {
         
         // Redirect after success - FIXED PATH
         setTimeout(() => {
-          navigate('/matched-influencers', {
+          navigate(`/matched-influencers/${data[0].id}`, {
             state: {
               campaignId: data[0].id,
               query: formData.campaign_name + ' ' + formData.description,

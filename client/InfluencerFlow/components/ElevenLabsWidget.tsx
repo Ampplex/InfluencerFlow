@@ -96,7 +96,7 @@ const ElevenLabsWidget = ({email, campaign_id}: any) => {
       if ((window as any).customElements?.get("elevenlabs-convai")) {
         const widget = document.createElement("elevenlabs-convai");
 
-        widget.setAttribute("agent-id", "agent_01jy01vv79f39rj05z86k8kdkj");
+        widget.setAttribute("agent-id", "agent_01jy45qdw4ex3vj5g4x8f1854n");
         widget.setAttribute(
           "dynamic-variables",
           JSON.stringify({
