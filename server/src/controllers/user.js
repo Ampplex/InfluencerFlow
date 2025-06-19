@@ -139,6 +139,57 @@ function parseFieldValue(key, value) {
   return value;
 }
 
+function isValidFieldValue(key, value) {
+  if (!value) return false;
+  if (key === "budget") return !isNaN(Number(value));
+  if (key === "start_date" || key === "end_date")
+    return /^\d{4}-\d{1,2}-\d{1,2}$/.test(value);
+  if (key === "voice_enabled")
+    return /^(yes|no|y|n|true|false|1|0)$/i.test(value);
+  if (key === "platforms") return value.split(",").length > 0;
+  return true;
+}
+
+async function sendInfluencerSelectionList(to, influencers) {
+  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+    throw new Error(
+      "WhatsApp phone number ID or access token not set in environment variables"
+    );
+  }
+  const url = `https://graph.facebook.com/v22.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const rows = influencers.slice(0, 10).map((inf, idx) => ({
+    id: `influencer_${inf.id}`,
+    title: inf.username,
+    description: `${inf.followers} followers${inf.bio ? " - " + inf.bio : ""}`,
+  }));
+  const data = {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      header: { type: "text", text: "Select an influencer:" },
+      body: { text: "Choose one influencer to proceed." },
+      footer: { text: "You can only select one at a time." },
+      action: {
+        button: "Select influencer",
+        sections: [
+          {
+            title: "Influencers",
+            rows,
+          },
+        ],
+      },
+    },
+  };
+  await axios.post(url, data, {
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+  });
+}
+
 module.exports = class UserController {
   // GET for webhook verification
   async verifyWebhook(req, res) {
@@ -197,40 +248,105 @@ module.exports = class UserController {
       // If user is in the middle of campaign creation, continue the flow
       if (phoneNumber && campaignSessions[phoneNumber]) {
         const session = campaignSessions[phoneNumber];
-        const currentField = getNextCampaignField(session);
-        if (currentField) {
+        if (session.awaitingField) {
+          const currentField = campaignFields.find(
+            (f) => f.key === session.awaitingField
+          );
+          if (!currentField) {
+            delete campaignSessions[phoneNumber];
+            await sendWhatsappTextMessage(
+              phoneNumber,
+              "Sorry, something went wrong. Please start again."
+            );
+            return res.status(200).send("Session error");
+          }
+          if (!isValidFieldValue(currentField.key, text)) {
+            await sendWhatsappTextMessage(
+              phoneNumber,
+              `Invalid input. ${currentField.prompt}`
+            );
+            return res.status(200).send("Invalid input, re-asked");
+          }
           session.data[currentField.key] = parseFieldValue(
             currentField.key,
             text
           );
           const nextField = getNextCampaignField(session);
           if (nextField) {
+            session.awaitingField = nextField.key;
             await sendWhatsappTextMessage(phoneNumber, nextField.prompt);
             return res.status(200).send("Awaiting next field");
           } else {
+            // All fields collected, fetch influencers
             await sendWhatsappTextMessage(
               phoneNumber,
               "Thanks! Finding matching influencers for your campaign..."
             );
-            const influencers = await fetchMatchedInfluencers(session.data);
-            if (influencers.length === 0) {
+            try {
+              const influencers = await fetchMatchedInfluencers(session.data);
+              console.log("Influencer API response:", influencers);
+              if (!Array.isArray(influencers)) {
+                await sendWhatsappTextMessage(
+                  phoneNumber,
+                  "Sorry, there was an error fetching influencers. Please try again later."
+                );
+              } else if (influencers.length === 0) {
+                await sendWhatsappTextMessage(
+                  phoneNumber,
+                  "No matching influencers found. Try adjusting your campaign criteria."
+                );
+              } else {
+                // Store influencers in session for selection
+                session.influencers = influencers;
+                session.awaitingField = null;
+                await sendInfluencerSelectionList(phoneNumber, influencers);
+                session.awaitingInfluencerSelection = true;
+              }
+            } catch (err) {
+              console.error(
+                "Influencer API error:",
+                err.response ? err.response.data : err.message
+              );
               await sendWhatsappTextMessage(
                 phoneNumber,
-                "No matching influencers found. Try adjusting your campaign criteria."
+                "Sorry, there was an error fetching influencers. Please try again later."
               );
-            } else {
-              let msg = "Here are some matching influencers:\n";
-              influencers.forEach((inf, idx) => {
-                msg += `\n${idx + 1}. ${inf.username} (${
-                  inf.followers
-                } followers)\n${inf.bio ? inf.bio + "\n" : ""}${
-                  inf.link ? inf.link : ""
-                }`;
-              });
-              await sendWhatsappTextMessage(phoneNumber, msg);
             }
-            delete campaignSessions[phoneNumber];
             return res.status(200).send("Influencer list sent");
+          }
+        } else if (
+          session.awaitingInfluencerSelection &&
+          interactive &&
+          interactive.type === "list_reply"
+        ) {
+          // Handle influencer selection
+          const selectedId =
+            interactive.list_reply && interactive.list_reply.id;
+          if (selectedId && selectedId.startsWith("influencer_")) {
+            const influencerId = selectedId.replace("influencer_", "");
+            const selectedInfluencer = (session.influencers || []).find(
+              (inf) => String(inf.id) === influencerId
+            );
+            if (selectedInfluencer) {
+              session.selectedInfluencer = selectedInfluencer;
+              await sendWhatsappTextMessage(
+                phoneNumber,
+                `You selected: ${selectedInfluencer.username} (${selectedInfluencer.followers} followers)`
+              );
+              // Here you can proceed to next steps (e.g., outreach, confirmation, etc.)
+              delete campaignSessions[phoneNumber];
+              return res.status(200).send("Influencer selected");
+            } else {
+              await sendWhatsappTextMessage(
+                phoneNumber,
+                "Invalid selection. Please try again."
+              );
+              await sendInfluencerSelectionList(
+                phoneNumber,
+                session.influencers
+              );
+              return res.status(200).send("Invalid influencer selection");
+            }
           }
         }
       }
@@ -239,7 +355,10 @@ module.exports = class UserController {
       if (interactive && interactive.type === "list_reply") {
         const selectedId = interactive.list_reply && interactive.list_reply.id;
         if (selectedId === "create_campaign") {
-          campaignSessions[phoneNumber] = { data: {} };
+          campaignSessions[phoneNumber] = {
+            data: {},
+            awaitingField: campaignFields[0].key,
+          };
           await sendWhatsappTextMessage(phoneNumber, campaignFields[0].prompt);
           return res.status(200).send("Started campaign creation");
         }
