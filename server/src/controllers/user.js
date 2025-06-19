@@ -316,6 +316,12 @@ module.exports = class UserController {
               .insert([campaignData])
               .select();
             if (insertError || !inserted || !inserted[0]) {
+              console.error(
+                "CAMPAIGN INSERT ERROR:",
+                insertError,
+                "DATA:",
+                campaignData
+              );
               await sendWhatsappTextMessage(
                 phoneNumber,
                 "Failed to create campaign. Please try again later."
