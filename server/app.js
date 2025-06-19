@@ -13,7 +13,9 @@ const app = express();
 const allowedOrigins = [
   '*',
   'http://localhost:5173',
-  'https://influencerflow-964513157102.asia-south1.run.app'
+  'https://influencerflow-964513157102.asia-south1.run.app',
+  'http://localhost:3000',
+  'https://app.influencerflow.in'
 ];
 
 app.use(cors({
