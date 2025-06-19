@@ -274,51 +274,85 @@ module.exports = class UserController {
             await sendWhatsappTextMessage(phoneNumber, nextField.prompt);
             return res.status(200).send("Awaiting next field");
           } else {
-            // All fields collected, fetch influencers
+            // All fields collected, create campaign in Supabase
             await sendWhatsappTextMessage(
               phoneNumber,
-              "Thanks! Finding matching influencers for your campaign..."
+              "Thanks! Creating your campaign and finding matching influencers..."
             );
-            console.log(
-              "[INFLUENCER_API] Request payload:",
-              JSON.stringify(session.data, null, 2)
+            // Fetch brand info
+            const { data: brandData, error: brandError } = await supabase
+              .from("brands")
+              .select("id, brand_name")
+              .eq("contact_num", phoneNumber)
+              .maybeSingle();
+            if (brandError || !brandData) {
+              await sendWhatsappTextMessage(
+                phoneNumber,
+                "Could not fetch your brand info. Please register on the website first."
+              );
+              delete campaignSessions[phoneNumber];
+              return res.status(200).send("Brand not found");
+            }
+            // Prepare campaign data (match frontend fields)
+            const campaignData = {
+              campaign_name: session.data.campaign_name,
+              description: session.data.description,
+              platforms: Array.isArray(session.data.platforms)
+                ? session.data.platforms.join(", ")
+                : session.data.platforms,
+              preferred_languages: session.data.preferred_languages || null,
+              budget: Number(session.data.budget),
+              start_date: session.data.start_date,
+              end_date: session.data.end_date,
+              brand_id: brandData.id,
+              brand_name: brandData.brand_name,
+              voice_enabled: session.data.voice_enabled,
+              status: "active",
+              report_id: require("crypto").randomUUID(),
+            };
+            // Insert campaign
+            const { data: inserted, error: insertError } = await supabase
+              .from("campaign")
+              .insert([campaignData])
+              .select();
+            if (insertError || !inserted || !inserted[0]) {
+              await sendWhatsappTextMessage(
+                phoneNumber,
+                "Failed to create campaign. Please try again later."
+              );
+              delete campaignSessions[phoneNumber];
+              return res.status(200).send("Campaign insert failed");
+            }
+            // WhatsApp confirmation to brand
+            await sendWhatsappTextMessage(
+              phoneNumber,
+              `Your campaign '${campaignData.campaign_name}' has been created and is now active!`
             );
+            // Store campaignId in session
+            session.campaignId = inserted[0].id;
+            session.brand_id = brandData.id;
+            session.brand_name = brandData.brand_name;
+            // Now fetch influencers
             try {
               const influencers = await fetchMatchedInfluencers(session.data);
-              console.log(
-                "[INFLUENCER_API] Response:",
-                JSON.stringify(influencers, null, 2)
-              );
-              if (!Array.isArray(influencers)) {
-                await sendWhatsappTextMessage(
-                  phoneNumber,
-                  "Sorry, there was an error fetching influencers. Please try again later."
-                );
-              } else if (influencers.length === 0) {
+              if (!Array.isArray(influencers) || influencers.length === 0) {
                 await sendWhatsappTextMessage(
                   phoneNumber,
                   "No matching influencers found. Try adjusting your campaign criteria."
                 );
-              } else {
-                // Store influencers in session for selection
-                session.influencers = influencers;
-                session.awaitingField = null;
-                await sendInfluencerSelectionList(phoneNumber, influencers);
-                session.awaitingInfluencerSelection = true;
+                delete campaignSessions[phoneNumber];
+                return res.status(200).send("No influencers found");
               }
+              session.influencers = influencers;
+              session.awaitingField = null;
+              await sendInfluencerSelectionList(phoneNumber, influencers);
+              session.awaitingInfluencerSelection = true;
             } catch (err) {
-              if (err.response) {
-                console.error(
-                  "[INFLUENCER_API] Error response:",
-                  JSON.stringify(err.response.data, null, 2)
-                );
-              } else {
-                console.error("[INFLUENCER_API] Error:", err.message);
-              }
               await sendWhatsappTextMessage(
                 phoneNumber,
                 "Sorry, there was an error fetching influencers. Please try again later."
               );
+              delete campaignSessions[phoneNumber];
             }
             return res.status(200).send("Influencer list sent");
           }
@@ -337,13 +371,64 @@ module.exports = class UserController {
             );
             if (selectedInfluencer) {
               session.selectedInfluencer = selectedInfluencer;
+              // --- Outreach Email Generation ---
+              // Call outreach email generator API
+              let outreachResult = null;
+              try {
+                const outreachRes = await axios.post(
+                  "https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/outreachEmailGenerator",
+                  {
+                    influencers_data: [selectedInfluencer],
+                    brand_name: session.brand_name,
+                    brand_description: session.data.description,
+                    campaign_id: String(session.campaignId),
+                    campaign_description: session.data.description,
+                  }
+                );
+                outreachResult =
+                  outreachRes.data &&
+                  outreachRes.data.emails &&
+                  outreachRes.data.emails[0];
+              } catch (err) {
+                await sendWhatsappTextMessage(
+                  phoneNumber,
+                  "Failed to generate outreach email. Please try again later."
+                );
+                delete campaignSessions[phoneNumber];
+                return res.status(200).send("Outreach email failed");
+              }
+              // Insert outreach record in Supabase
+              const outreachRecord = {
+                campaign_id: session.campaignId,
+                influencer_id: selectedInfluencer.id,
+                influencer_username: selectedInfluencer.username,
+                influencer_email: selectedInfluencer.email,
+                influencer_followers: selectedInfluencer.followers,
+                brand_id: session.brand_id,
+                email_subject: outreachResult ? outreachResult.subject : null,
+                email_body: outreachResult ? outreachResult.body : null,
+                status: "sent",
+                sent_at: new Date().toISOString(),
+              };
+              const { error: outreachInsertError } = await supabase
+                .from("outreach")
+                .insert([outreachRecord]);
+              if (outreachInsertError) {
+                await sendWhatsappTextMessage(
+                  phoneNumber,
+                  "Failed to save outreach record. Please try again later."
+                );
+                delete campaignSessions[phoneNumber];
+                return res.status(200).send("Outreach insert failed");
+              }
               await sendWhatsappTextMessage(
                 phoneNumber,
-                `You selected: ${selectedInfluencer.username} (${selectedInfluencer.followers} followers)`
+                `Outreach sent to ${selectedInfluencer.username}. You will be notified when they reply.`
               );
-              // Here you can proceed to next steps (e.g., outreach, confirmation, etc.)
               delete campaignSessions[phoneNumber];
-              return res.status(200).send("Influencer selected");
+              return res
+                .status(200)
+                .send("Influencer selected and outreach sent");
             } else {
               await sendWhatsappTextMessage(
                 phoneNumber,
