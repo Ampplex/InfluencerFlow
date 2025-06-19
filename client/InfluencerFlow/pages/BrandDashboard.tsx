@@ -982,7 +982,15 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                               View Report
                             </motion.button>
                           ) : campaign.status === 'draft' ? (
-                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium">
+                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium" onClick={() => {
+                              navigate(`/matched-influencers/${campaign.id}`, {
+                                state: {
+                                  query: campaign.campaign_name + ' ' + campaign.description,
+                                  campaign_description: campaign.description,
+                                  limit: 10,
+                                },
+                              });
+                            }}>
                               Setup Required
                             </div>
                           ) : campaign.status === 'in_review' ? (

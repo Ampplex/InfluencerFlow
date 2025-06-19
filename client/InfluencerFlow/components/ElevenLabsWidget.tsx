@@ -48,7 +48,9 @@ const ElevenLabsWidget = ({email, campaign_id}: any) => {
           setBrandDescription(data);
         }
     }
-
+    if (!campaignData) {
+      return;
+    }
     fetchBrand();
   }, [campaign_id, campaignData])
 

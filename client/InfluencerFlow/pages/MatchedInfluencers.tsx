@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import supabase from '../utils/supabase';
 import { motion } from 'framer-motion';
 import { 
@@ -22,14 +22,19 @@ import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Define the structure of an influencer object
+// Define types at the top for use in the file
 interface Influencer {
   id: string;
   username: string;
   email: string;
-  bio: string;
   followers: number;
+  bio: string;
   link: string;
+}
+
+interface OutreachEmail {
+  subject: string;
+  body: string;
 }
 
 // Define the API response structure
@@ -56,14 +61,15 @@ interface OutreachRecord {
 }
 
 function MatchedInfluencers() {
+  const { campaignId: campaignIdParam } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Get campaign data from navigation state
-  const campaignId = location.state?.campaignId;
+  // Get campaignId from route param or navigation state
+  const campaignId = campaignIdParam || location.state?.campaignId;
   const query = location.state?.query;
   const limit = location.state?.limit || 10;
-  const campaign_description = location.state.campaign_description;
+  const campaign_description = location.state?.campaign_description;
   
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +148,11 @@ function MatchedInfluencers() {
       alert("Please select at least one influencer for outreach.");
       return;
     }
-
+    if (!campaignId) {
+      alert("Campaign ID not found. Please return to the dashboard and try again.");
+      navigate('/dashboard');
+      return;
+    }
     setIsOutreaching(true);
     
     try {
@@ -179,6 +189,15 @@ function MatchedInfluencers() {
           campaign_description: campaign_description
         })
       });
+
+      const data = {
+        influencers_data: selectedData,
+        brand_name: brand_name,
+        brand_description: brand_description,
+        campaign_id: campaignId.toString(),
+        campaign_description: campaign_description
+      }
+      console.log("Look data: ",data);
       
       if (!response.ok) {
         throw new Error(`Outreach failed: ${response.status}`);
@@ -188,7 +207,7 @@ function MatchedInfluencers() {
       console.log("Outreach result:", result);
 
       // Save outreach records to database
-      await saveOutreachRecords(selectedData, result.emails || [], session.user.id);
+      await saveOutreachRecords(selectedData, result.emails || [], session.user.id, campaignId);
 
       alert(`Outreach initiated successfully for ${selectedInfluencers.size} influencer(s)! Dashboard will be updated with the outreach status.`);
       setSelectedInfluencers(new Set());
@@ -623,6 +642,37 @@ function MatchedInfluencers() {
 
 export default MatchedInfluencers;
 
-function saveOutreachRecords(selectedData: Influencer[], arg1: any, id: string) {
-  throw new Error("Function not implemented.");
+async function saveOutreachRecords(
+  selectedData: Influencer[],
+  emails: OutreachEmail[],
+  brandId: string,
+  campaignId: string | number
+) {
+  // emails is an array of generated email objects, one per influencer
+  const records = selectedData.map((influencer: Influencer, idx: number) => ({
+    campaign_id: campaignId,
+    influencer_id: influencer.id,
+    influencer_username: influencer.username,
+    influencer_email: influencer.email,
+    influencer_followers: influencer.followers,
+    brand_id: brandId,
+    email_subject: emails[idx]?.subject || '',
+    email_body: emails[idx]?.body || '',
+    status: 'sent',
+    sent_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from('outreach').insert(records);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // Update campaign status to 'active'
+  const { error: campaignError } = await supabase
+    .from('campaign')
+    .update({ status: 'active', updated_at: new Date().toISOString() })
+    .eq('id', campaignId);
+  if (campaignError) {
+    throw new Error('Failed to update campaign status: ' + campaignError.message);
+  }
 }
