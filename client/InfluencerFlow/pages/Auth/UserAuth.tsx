@@ -15,8 +15,6 @@ interface LoginForm {
   username: string;
   followers: string;
   platforms: string;
-  bio: string;
-  phoneNum: string;
   // Email verification
   verificationCode: string;
 }
@@ -47,8 +45,6 @@ export function UserLogin() {
     username: '',
     followers: '',
     platforms: '',
-    bio: '',
-    phoneNum: '',
     verificationCode: ''
   });
   
@@ -117,8 +113,6 @@ export function UserLogin() {
       username: '',
       followers: '',
       platforms: '',
-      bio: '',
-      phoneNum: '',
       verificationCode: ''
     });
     setError(null);
@@ -330,8 +324,6 @@ export function UserLogin() {
           email: form.email.trim().toLowerCase(),
           password: form.password,
           username: form.username.trim(),
-          bio: form.bio.trim(),
-          phoneNum: form.phoneNum.trim()
         }),
       });
 
@@ -490,8 +482,6 @@ export function UserLogin() {
       username: '',
       followers: '',
       platforms: '',
-      bio: '',
-      phoneNum: '',
       verificationCode: ''
     });
     setUserInfo(null);
@@ -1131,35 +1121,6 @@ export function UserLogin() {
                       required
                     />
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="bio" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Bio
-                  </Label>
-                  <Input
-                    id="bio"
-                    type="text"
-                    value={form.bio}
-                    onChange={(e) => setForm(prev => ({ ...prev, bio: e.target.value }))}
-                    className="mt-1 font-mono"
-                    placeholder="Content creator specializing in..."
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="phoneNum" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Phone Number (Optional)
-                  </Label>
-                  <Input
-                    id="phoneNum"
-                    type="tel"
-                    value={form.phoneNum}
-                    onChange={(e) => setForm(prev => ({ ...prev, phoneNum: e.target.value }))}
-                    className="mt-1 font-mono"
-                    placeholder="+1234567890"
-                    maxLength={13}
-                  />
                 </div>
 
                 <div>

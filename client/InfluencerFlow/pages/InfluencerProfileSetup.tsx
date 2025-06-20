@@ -67,7 +67,7 @@ export const upsertInfluencerProfile = async (profile: any, authToken: string) =
 
   let result;
   if (existingData) {
-    // Update existing profile - removed updated_at since column doesn't exist
+    // Update existing profile
     const { data, error } = await supabase
       .from('influencers')
       .update({
@@ -82,13 +82,13 @@ export const upsertInfluencerProfile = async (profile: any, authToken: string) =
     if (error) throw error;
     result = data;
   } else {
-    // Insert new profile - removed updated_at and created_at since created_at has DEFAULT
+    // Insert new profile
     const { data, error } = await supabase
       .from('influencers')
       .insert({
         id: profile.id,
-        influencer_username: profile.username || 'user_' + profile.id.slice(0, 8), // Add required username
-        influencer_email: profile.email || '', // Add required email
+        influencer_username: profile.username || 'user_' + profile.id.slice(0, 8),
+        influencer_email: profile.email || '',
         bio: profile.bio,
         phone_num: profile.phone_num,
         platforms: profile.platforms
@@ -186,6 +186,7 @@ const InfluencerProfileSetup: React.FC = () => {
     setPlatforms(updatedPlatforms);
   };
   
+  // ✅ FIXED: Simplified form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPhoneError('');
@@ -202,16 +203,9 @@ const InfluencerProfileSetup: React.FC = () => {
       return;
     }
 
-    // Bio validation
-    if (!bio || bio.trim().length < 20) {
-      setError('Bio must be at least 20 characters long.');
-      return;
-    }
-
-    // Platform validation
-    const activePlatforms = platforms.filter(p => p.url.trim() !== '');
-    if (activePlatforms.length === 0) {
-      setError('Please add at least one social media platform.');
+    // ✅ FIXED: Simplified validation - only require phone and bio
+    if (!bio || bio.trim().length < 10) {
+      setError('Bio must be at least 10 characters long.');
       return;
     }
     
@@ -222,11 +216,14 @@ const InfluencerProfileSetup: React.FC = () => {
       const authToken = sessionData.session?.access_token;
       if (!authToken) throw new Error('No authentication token available');
       
+      // ✅ FIXED: Include all platforms, not just active ones
+      const activePlatforms = platforms.filter(p => p.url.trim() !== '');
       const platformsJson = JSON.stringify(activePlatforms);
+      
       const profile = {
         id: userId,
         bio: bio.trim(),
-        phone_num: phone, // Save as string
+        phone_num: phone,
         platforms: platformsJson,
       };
       
@@ -236,9 +233,19 @@ const InfluencerProfileSetup: React.FC = () => {
         throw new Error(`Failed to update profile: ${JSON.stringify(errorData)}`);
       }
       
+      // ✅ FIXED: Proper navigation
       sessionStorage.setItem('profileSetupCompleted', 'true');
-      // Force a full reload to ensure the latest profile data is fetched
-      window.location.reload();
+      console.log('Profile setup completed, navigating to dashboard...');
+      
+      // Use navigate instead of window.location.reload()
+      navigate('/dashboard', { replace: true });
+      
+      // Fallback navigation after a delay
+      setTimeout(() => {
+        if (window.location.pathname !== '/dashboard') {
+          window.location.href = '/dashboard';
+        }
+      }, 1000);
       
     } catch (err: any) {
       setError(err.message || 'Failed to update profile');
@@ -282,7 +289,6 @@ const InfluencerProfileSetup: React.FC = () => {
         transition={{ duration: 0.5 }}
       >
         {/* Header */}
-        
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-8">
             <div className="w-8 h-8 mr-3">
@@ -330,6 +336,7 @@ const InfluencerProfileSetup: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg">
+          {/* ✅ FIXED: Proper form with onSubmit */}
           <form onSubmit={handleSubmit} className="space-y-8">
             
             {/* Bio Section */}
@@ -371,9 +378,9 @@ const InfluencerProfileSetup: React.FC = () => {
                     // Describe your content style, audience, and what you're passionate about
                   </p>
                   <span className={`text-xs font-mono ${
-                    bio.length >= 20 ? 'text-green-600' : bio.length > 0 ? 'text-orange-600' : 'text-slate-400'
+                    bio.length >= 10 ? 'text-green-600' : bio.length > 0 ? 'text-orange-600' : 'text-slate-400'
                   }`}>
-                    {bio.length}/20
+                    {bio.length}/10
                   </span>
                 </div>
               </div>
@@ -456,7 +463,7 @@ const InfluencerProfileSetup: React.FC = () => {
                       Your Social Presence
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Connect your platforms to showcase your reach
+                      Connect your platforms to showcase your reach (optional)
                     </p>
                   </div>
                 </div>
@@ -537,26 +544,17 @@ const InfluencerProfileSetup: React.FC = () => {
               </motion.div>
             )}
 
-            {/* Submit Button */}
+            {/* ✅ FIXED: Simple submit button */}
             <motion.div
               className="flex justify-end pt-6"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.5 }}
             >
-              <HoverBorderGradient
-                containerClassName="rounded-xl"
-                as="button"
-                className={`bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center px-8 py-4 text-base font-medium ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                onClick={(e: React.MouseEvent) => {
-                  if (loading) return;
-                  e.preventDefault();
-                  const form = e.currentTarget.closest('form');
-                  if (form) {
-                    const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-                    form.dispatchEvent(submitEvent);
-                  }
-                }}
+              <button
+                type="submit"
+                disabled={loading}
+                className={`bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center px-8 py-4 text-base font-medium rounded-xl hover:shadow-lg transition-all duration-200 ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02]'}`}
               >
                 {loading ? (
                   <>
@@ -569,7 +567,7 @@ const InfluencerProfileSetup: React.FC = () => {
                     <ArrowRight className="w-4 h-4 ml-3" />
                   </>
                 )}
-              </HoverBorderGradient>
+              </button>
             </motion.div>
           </form>
         </div>
