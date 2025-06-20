@@ -167,7 +167,7 @@ module.exports = class InstagramYoutubeController {
       const url = `https://graph.facebook.com/v19.0/${IG_BUSINESS_ID}?fields=business_discovery.username(${username}){media.limit(100){${MEDIA_FIELDS}}}&access_token=${ACCESS_TOKEN}`;
       const response = await axios.get(url);
       const media = (response.data.business_discovery && response.data.business_discovery.media && response.data.business_discovery.media.data) || [];
-      const post = media.find(m => m.id === postId);
+      const post = media.find((m) => m.permalink.includes(postId));
       if (!post) {
         return res.status(404).json({ error: 'Post not found for this user' });
       }

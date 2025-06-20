@@ -62,13 +62,13 @@ const InfluencerDashboard = () => {
   const [totalReach, setTotalReach] = useState<number>(0);
   const [outreachCampaigns, setOutreachCampaigns] = useState<OutreachCampaign[]>([]);
 
-  // Add state for influencer profile and Instagram posts
-  const [ setInfluencerProfile] = useState<any>(null);
+  // State for influencer profile and Instagram posts
   const [instagramUsername, setInstagramUsername] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [igPosts, setIgPosts] = useState<any[]>([]);
   const [igLoading, setIgLoading] = useState(false);
   const [igError, setIgError] = useState<string | null>(null);
-  const [selectedIgPost, setSelectedIgPost] = useState<string>('');
+  const [selectedIgPostId, setSelectedIgPostId] = useState<string>('');
 
   // Fetch campaigns and promo posts for this influencer
   useEffect(() => {
@@ -80,6 +80,38 @@ const InfluencerDashboard = () => {
         const uid = sessionData.session?.user?.id;
         if (!uid) throw new Error('User not authenticated');
         setUserId(uid);
+        
+        // Fetch influencer profile to get instagram username
+        const { data: profileData, error: profileError } = await supabase
+          .from('influencers')
+          .select('platforms')
+          .eq('id', uid)
+          .single();
+        
+        if (profileError) {
+          console.error("Error fetching influencer profile:", profileError.message);
+          setProfileError("Could not fetch your profile data.");
+        } else if (profileData?.platforms) {
+          try {
+            const platformsArr = JSON.parse(profileData.platforms);
+            const ig = platformsArr.find((p: { platform: string; url: string }) => p.platform === 'Instagram' && p.url);
+            if (ig?.url) {
+              const match = ig.url.match(/instagram.com\/(.+?)(\/|$)/);
+              if (match && match[1]) {
+                setInstagramUsername(match[1]);
+              } else {
+                setProfileError("Your Instagram profile URL is invalid. Please update it in your profile settings to fetch posts.");
+              }
+            } else {
+              setProfileError("No Instagram URL found in your profile. Please add it in your profile settings.");
+            }
+          } catch (e) {
+            console.error("Could not parse platforms JSON.", e);
+            setProfileError("Could not read your profile's social media links.");
+          }
+        } else {
+          setProfileError("Please complete your profile to link your social media accounts.");
+        }
         
         // Fetch outreach records for this influencer (without embedding)
         const { data: outreachData, error: outreachError } = await supabase
@@ -124,89 +156,36 @@ const InfluencerDashboard = () => {
     };
     fetchUserAndData();
   }, []);
-
-  // Fetch influencer profile (including platforms) on load
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const uid = sessionData.session?.user?.id;
-        if (!uid) return;
-        // Fetch influencer profile
-        const { data, error } = await supabase
-          .from('influencers')
-          .select('platforms')
-          .eq('id', uid)
-          .single();
-        if (error) return;
-        setInfluencerProfile(data);
-        // Parse Instagram username from platforms
-        if (data && data.platforms) {
-          try {
-            const platformsArr = JSON.parse(data.platforms);
-            const ig = platformsArr.find((p: any) => p.platform === 'Instagram' && p.url);
-            if (ig && ig.url) {
-              // Extract username from URL (e.g. https://instagram.com/username)
-              const match = ig.url.match(/instagram.com\/(.+?)(\/|$)/);
-              setInstagramUsername(match ? match[1] : null);
-            } else {
-              setInstagramUsername(null);
-            }
-          } catch (e) {
-            setInstagramUsername(null);
-          }
-        } else {
-          setInstagramUsername(null);
-        }
-      } catch (e) {
-        setInfluencerProfile(null);
-        setInstagramUsername(null);
-      }
-    };
-    fetchProfile();
-  }, []);
-
+    
   // Fetch Instagram posts/reels if Instagram is selected and username exists
   useEffect(() => {
-    console.log('DEBUG: useEffect triggered. platform:', platform, 'instagramUsername:', instagramUsername);
     const fetchInstagramPosts = async () => {
+      console.log(`▶️ Checking conditions to fetch IG posts:
+        - Platform: '${platform}'
+        - Username: '${instagramUsername}'`);
+    
       if (platform !== 'Instagram' || !instagramUsername) {
-        console.log('DEBUG: Not fetching IG posts. platform:', platform, 'instagramUsername:', instagramUsername);
         setIgPosts([]);
+        if(platform === 'Instagram' && !instagramUsername) {
+            console.warn("Cannot fetch posts: Instagram is selected, but no username is available.");
+    }
         return;
       }
+      
+      console.log(`🚀 Fetching Instagram posts for ${instagramUsername}...`);
       setIgLoading(true);
       setIgError(null);
       try {
-        console.log('DEBUG: Fetching IG posts for username:', instagramUsername);
         const response = await axios.get(`/api/monitor/instagram-posts?username=${instagramUsername}`);
-        console.log('DEBUG: Full IG posts response:', response.data);
-        // Defensive: handle both { posts: [...] } and [...] directly
-        let posts = [];
-        if (Array.isArray(response.data)) {
-          posts = response.data;
-        } else if (response.data && Array.isArray(response.data.posts)) {
-          posts = response.data.posts;
-        } else if (typeof response.data === 'string' && response.data.startsWith('<!doctype html>')) {
-          setIgError('Could not fetch Instagram posts. Please check your connection or try again later.');
-          setIgPosts([]);
-          console.error('DEBUG: Received HTML instead of JSON:', response.data);
-          return;
-        } else {
-          setIgError('Unexpected response from server.');
-          setIgPosts([]);
-          console.error('DEBUG: Unexpected IG posts response:', response.data);
-          return;
+        const posts = response.data.posts || [];
+        setIgPosts(posts);
+        console.log(`✅ Successfully fetched ${posts.length} posts.`);
+        if (posts.length === 0) {
+          setIgError('No posts found. Your account might be private or have no posts.');
         }
-        setIgPosts(posts || []);
-        if (!posts || posts.length === 0) {
-          setIgError('No posts found. Make sure your Instagram account is a business/creator account and is connected to the platform.');
-        }
-        console.log('DEBUG: IG posts fetched:', posts);
-      } catch (err: any) {
-        setIgError('Failed to fetch Instagram posts. Please check your connection or try again later.');
-        setIgPosts([]);
-        console.log('DEBUG: Error fetching IG posts:', err);
+      } catch (err) {
+        setIgError('Failed to fetch Instagram posts. The backend might be down.');
+        console.error("Full error object:", err);
       } finally {
         setIgLoading(false);
       }
@@ -214,48 +193,43 @@ const InfluencerDashboard = () => {
     fetchInstagramPosts();
   }, [platform, instagramUsername]);
 
-  // Submit a new promo post
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-    // If Instagram, require a selected post; else require postUrl
-    if (!selectedCampaign || !platform || (platform === 'Instagram' ? !selectedIgPost : !postUrl)) {
+
+    const finalPostValue = platform === 'Instagram' ? selectedIgPostId : postUrl;
+
+    if (!selectedCampaign || !platform || !finalPostValue) {
       setError('Please select a campaign, platform, and enter/select the post.');
       return;
     }
     try {
-      // For Instagram, store the post ID; for others, store the URL
-      let postValue = '';
-      if (platform === 'Instagram') {
-        // selectedIgPost is the post ID
-        postValue = selectedIgPost;
-      } else {
-        postValue = postUrl;
-      }
       const { error: insertError } = await supabase
         .from('promo_posts')
         .insert([
           {
             campaign_id: selectedCampaign,
             influencer_id: userId,
-            post_url: postValue, // If you have a post_id field, use that instead
+            post_url: finalPostValue,
             platform,
+            status: 'submitted',
           },
         ]);
       if (insertError) throw insertError;
+
       setSuccess('Promotional post link submitted!');
+      // Reset form
       setPostUrl('');
       setPlatform('');
       setSelectedCampaign(null);
-      setSelectedIgPost('');
-      // Refresh posts
+      setSelectedIgPostId('');
+      // Refresh posts list
       const { data: postData } = await supabase
         .from('promo_posts')
         .select('*')
         .eq('influencer_id', userId);
       setPromoPosts(postData || []);
-      setTotalReach((postData?.length || 0) * 25000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit post link');
     }
@@ -333,24 +307,24 @@ const InfluencerDashboard = () => {
     <div className="min-h-screen bg-white dark:bg-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <motion.div
+      <motion.div 
           className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
           <div>
             <div className="flex items-center mb-4">
-              <div className="w-8 h-8 mr-3">
-                <img 
-                  src="https://assets.influencerflow.in/logos/png/if-bg-w.png" 
-                  alt="InfluencerFlow Logo" 
-                  className="w-full h-full object-contain" 
-                />
-              </div>
+            <div className="w-8 h-8 mr-3">
+              <img 
+                src="https://assets.influencerflow.in/logos/png/if-bg-w.png" 
+                alt="InfluencerFlow Logo" 
+                className="w-full h-full object-contain" 
+              />
+            </div>
               <span className="font-mono text-lg font-semibold text-slate-900 dark:text-slate-100">
-                InfluencerFlow.in
-              </span>
+              InfluencerFlow.in
+            </span>
             </div>
             <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">Creator Dashboard</h1>
             <p className="text-slate-600 dark:text-slate-400 font-mono text-sm">
@@ -386,12 +360,12 @@ const InfluencerDashboard = () => {
         </motion.div>
 
         {/* Metrics Cards */}
-        <motion.div
+          <motion.div
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
           {metrics.map((stat, idx) => (
             <motion.div
               key={idx}
@@ -408,16 +382,16 @@ const InfluencerDashboard = () => {
               <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{stat.subtitle}</p>
             </motion.div>
           ))}
-        </motion.div>
-
+          </motion.div>
+            
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Campaigns List */}
-          <motion.div
+            <motion.div
             className="lg:col-span-2"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-mono">your_campaigns()</h2>
@@ -474,8 +448,8 @@ const InfluencerDashboard = () => {
                           <div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">start_date</p>
                             <p className="font-bold text-slate-900 dark:text-slate-100">{campaign.start_date}</p>
-                          </div>
-                          <div>
+                  </div>
+                  <div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">end_date</p>
                             <p className="font-bold text-slate-900 dark:text-slate-100">{campaign.end_date}</p>
                           </div>
@@ -485,7 +459,7 @@ const InfluencerDashboard = () => {
                             className="bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${progress}%` }}
                           ></div>
-                        </div>
+                  </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{progress}% complete</p>
                       </motion.div>
                     );
@@ -498,8 +472,8 @@ const InfluencerDashboard = () => {
                   <p className="text-slate-600 dark:text-slate-400 font-mono text-sm">// You are not assigned to any campaigns yet</p>
                 </div>
               )}
-            </div>
-          </motion.div>
+              </div>
+            </motion.div>
 
           {/* Submit Post Link & Submitted Posts */}
           <div className="space-y-6">
@@ -531,9 +505,9 @@ const InfluencerDashboard = () => {
                     <select
                       value={platform}
                       onChange={e => {
+                        console.log(`💻 Platform changed to: ${e.target.value}`);
                         setPlatform(e.target.value);
-                        setSelectedIgPost('');
-                        console.log('DEBUG: Platform changed to', e.target.value);
+                        setSelectedIgPostId('');
                       }}
                       className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
@@ -548,57 +522,61 @@ const InfluencerDashboard = () => {
                     </select>
                   </div>
                   {/* If Instagram is selected and username exists, show IG post dropdown */}
-                  {platform === 'Instagram' && instagramUsername ? (
+                  {platform === 'Instagram' ? (
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 font-mono">select_instagram_post</label>
-                      {igLoading ? (
-                        <div className="text-slate-500 dark:text-slate-400 text-sm font-mono">loading_posts...</div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Select Instagram Post</label>
+                      {profileError ? (
+                        <div className="text-red-500 text-sm p-2 bg-red-50 rounded-md">{profileError}</div>
+                      ) : igLoading ? (
+                        <div className="text-gray-500 text-sm">Fetching posts...</div>
                       ) : igError ? (
-                        <div className="text-red-500 dark:text-red-400 text-sm font-mono">{igError}</div>
-                      ) : igPosts.length > 0 ? (
+                        <div className="text-red-500 text-sm">{igError}</div>
+                      ) : (
                         <select
-                          value={selectedIgPost}
-                          onChange={e => setSelectedIgPost(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={selectedIgPostId}
+                          onChange={e => setSelectedIgPostId(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
                           required
                         >
                           <option value="" disabled>Select a post</option>
-                          {igPosts.map((post: any) => (
-                            <option key={post.id} value={post.id}>{post.caption ? post.caption.substring(0, 50) : post.id}</option>
-                          ))}
+                          {igPosts.map((post: any) => {
+                            const shortcodeMatch = post.permalink.match(/instagram.com\/p\/([a-zA-Z0-9_-]+)/);
+                            const shortcode = shortcodeMatch ? shortcodeMatch[1] : null;
+                            if (!shortcode) return null;
+                            return (
+                              <option key={post.id} value={shortcode}>
+                                {post.caption ? `${post.caption.substring(0, 50)}...` : post.permalink}
+                              </option>
+                            )
+                          })}
                         </select>
-                      ) : null}
+                      )}
                     </div>
                   ) : (
-                    // Fallback: regular URL input for other platforms or if no IG username
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 font-mono">post_url</label>
-                      <input
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Post URL</label>
+                <input
                         type="url"
                         value={postUrl}
                         onChange={e => setPostUrl(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="https://instagram.com/your-post"
-                        required
-                      />
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="https://..."
+                        required={platform !== 'Instagram'}
+                />
                     </div>
                   )}
-                  {error && (
-                    <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                      <div className="text-red-600 dark:text-red-400 text-sm font-mono">{error}</div>
-                    </div>
-                  )}
+                  {error && <div className="text-red-600 text-sm mt-2">{error}</div>}
                   {success && (
                     <div className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg p-3">
                       <div className="text-green-600 dark:text-green-400 text-sm font-mono">{success}</div>
-                    </div>
+              </div>
                   )}
                   <button
                     type="submit"
-                    className="w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 py-3 rounded-lg font-mono font-medium hover:shadow-lg transition-all duration-200 disabled:opacity-50"
-                    disabled={loading || (platform === 'Instagram' && !selectedIgPost)}
+                    className="w-full px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-md font-semibold shadow hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50"
+                    disabled={loading || igLoading || (platform === 'Instagram' && !selectedIgPostId)}
                   >
-                    submit_post_link()
+                    Submit Post Link
                   </button>
                 </form>
               </div>
@@ -611,39 +589,24 @@ const InfluencerDashboard = () => {
               transition={{ duration: 0.5, delay: 0.4 }}
             >
               <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200">
-                <h2 className="text-xl font-bold mb-6 text-slate-900 dark:text-slate-100 font-mono">submitted_posts()</h2>
+                <h2 className="text-xl font-bold text-gray-800 mb-4">Submitted Posts</h2>
                 {promoPosts.length === 0 ? (
-                  <p className="text-slate-500 dark:text-slate-400 font-mono text-sm">// No posts submitted yet</p>
+                  <p className="text-gray-500">No posts submitted yet.</p>
                 ) : (
                   <div className="space-y-3">
                     {promoPosts.map(post => (
-                      <div key={post.id} className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg p-4 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
-                        <div className="flex flex-col space-y-2">
-                          <div className="font-bold text-slate-900 dark:text-slate-100">{campaigns.find(c => c.id === post.campaign_id)?.campaign_name || 'Campaign'}</div>
-                          <div className="text-slate-700 dark:text-slate-300 text-sm font-mono">{post.platform}</div>
-                          {post.platform === 'Instagram' ? (
-                            <a
-                              href={`https://instagram.com/p/${post.post_url}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 underline break-all text-sm font-mono hover:text-blue-700 dark:hover:text-blue-300"
-                            >
-                              view_instagram_post() // ID: {post.post_url}
-                            </a>
-                          ) : (
-                            <a
-                              href={post.post_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 underline break-all text-sm font-mono hover:text-blue-700 dark:hover:text-blue-300"
-                            >
-                              {post.post_url}
-                            </a>
-                          )}
-                          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                            // Submitted: {new Date(post.created_at).toLocaleString()}
-                          </div>
-                        </div>
+                      <div key={post.id} className="border-b border-gray-200 pb-3">
+                        <p className="font-semibold text-gray-800">{campaigns.find(c => c.id === post.campaign_id)?.campaign_name}</p>
+                        <p className="text-sm text-gray-600">{post.platform}</p>
+                        <a 
+                          href={post.platform === 'Instagram' ? `https://instagram.com/p/${post.post_url}` : post.post_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-blue-600 underline break-all text-sm"
+                        >
+                          {post.platform === 'Instagram' ? `View Post (ID: ${post.post_url})` : post.post_url}
+                        </a>
+                        <p className="text-xs text-gray-400 mt-1">Submitted: {new Date(post.created_at).toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
@@ -652,7 +615,7 @@ const InfluencerDashboard = () => {
             </motion.div>
           </div>
         </div>
-      </div>
+        </div>
     </div>
   );
 };

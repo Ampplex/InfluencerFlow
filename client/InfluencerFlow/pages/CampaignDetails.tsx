@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import supabase from '../utils/supabase';
 import axios from 'axios';
+import monitoringApi from '../services/monitoringService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid } from 'recharts';
 
 interface Campaign {
@@ -27,6 +28,79 @@ export default function CampaignDetails() {
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsError, setPostsError] = useState<string | null>(null);
 
+  const fetchPostStats = async (post: any) => {
+    let realTimeData = null;
+    let fetchError = null;
+
+    if (post.platform === 'Instagram') {
+      const { data: influencer } = await supabase
+        .from('influencers')
+        .select('platforms, influencer_username')
+        .eq('id', post.influencer_id)
+        .single();
+      let igUsername = null;
+      if (influencer && influencer.platforms) {
+        try {
+          const platformsArr = JSON.parse(influencer.platforms);
+          const ig = platformsArr.find((p: any) => p.platform === 'Instagram' && p.url);
+          if (ig && ig.url) {
+            const match = ig.url.match(/instagram.com\/(.+?)(\/|$)/);
+            igUsername = match ? match[1] : null;
+          }
+        } catch {}
+      }
+      if (igUsername) {
+        try {
+          const igResp = await monitoringApi.post('/instagram/by-username-and-id', {
+            username: igUsername,
+            postId: post.post_url,
+          });
+          realTimeData = igResp.data;
+        } catch (e: any) {
+          fetchError = e?.response?.data?.error || 'Failed to fetch IG data';
+        }
+      } else {
+        fetchError = 'No IG username';
+      }
+    } else if (post.platform === 'YouTube') {
+      try {
+        const ytResp = await monitoringApi.post('/youtube/monitor', {
+          videoUrl: post.post_url,
+        });
+        realTimeData = ytResp.data;
+      } catch (e: any) {
+        fetchError = e?.response?.data?.error || 'Failed to fetch YT data';
+      }
+    }
+
+    if (realTimeData) {
+      const { error: updateError } = await supabase
+        .from('promo_posts')
+        .update({
+          views: realTimeData.view_count || realTimeData.views || null,
+          likes: realTimeData.like_count || realTimeData.likes || null,
+          comments: realTimeData.comments_count || realTimeData.comments || null,
+          last_monitored: new Date().toISOString(),
+        })
+        .eq('id', post.id);
+
+      if (updateError) {
+        console.error('Failed to update post stats in DB', updateError);
+        // We can still show the data, but maybe show a small warning
+      }
+    }
+    
+    // Update the state for the specific post
+    setPosts(currentPosts => 
+      currentPosts.map(p => 
+        p.id === post.id 
+          ? { ...p, realTime: realTimeData, error: fetchError } 
+          : p
+      )
+    );
+    return { ...post, realTime: realTimeData, error: fetchError };
+  };
+
   useEffect(() => {
     async function fetchCampaign() {
       setLoading(true);
@@ -49,7 +123,7 @@ export default function CampaignDetails() {
   }, [id]);
 
   useEffect(() => {
-    async function fetchPosts() {
+    async function fetchInitialPosts() {
       if (!id) return;
       setPostsLoading(true);
       setPostsError(null);
@@ -57,86 +131,41 @@ export default function CampaignDetails() {
       try {
         const { data: promoPosts, error: promoError } = await supabase
           .from('promo_posts')
-          .select('*')
+          .select('*, influencers(influencer_username)')
           .eq('campaign_id', id);
+
         if (promoError) throw promoError;
-        const enrichedPosts = await Promise.all(
-          (promoPosts || []).map(async (post: any) => {
-            if (post.platform === 'Instagram') {
-              // Fetch influencer username and Instagram username
-              const { data: influencer } = await supabase
-                .from('influencers')
-                .select('platforms, influencer_username')
-                .eq('id', post.influencer_id)
-                .single();
-              let igUsername = null;
-              if (influencer && influencer.platforms) {
-                try {
-                  const platformsArr = JSON.parse(influencer.platforms);
-                  const ig = platformsArr.find((p: any) => p.platform === 'Instagram' && p.url);
-                  if (ig && ig.url) {
-                    const match = ig.url.match(/instagram.com\/(.+?)(\/|$)/);
-                    igUsername = match ? match[1] : null;
-                  }
-                } catch {}
-              }
-              const displayName = influencer?.influencer_username || '-';
-              if (igUsername) {
-                try {
-                  const igResp = await axios.post('/api/monitor/instagram/by-username-and-id', {
-                    username: igUsername,
-                    postId: post.post_url,
-                  });
-                  return { ...post, realTime: igResp.data, influencerUsername: displayName };
-                } catch (e: any) {
-                  return { ...post, realTime: null, influencerUsername: displayName, error: e?.response?.data?.error || 'Failed to fetch IG data' };
-                }
-              } else {
-                return { ...post, realTime: null, influencerUsername: displayName, error: 'No IG username' };
-              }
-            } else if (post.platform === 'YouTube') {
-              try {
-                const ytResp = await axios.post('/api/monitor/youtube/monitor', {
-                  videoUrl: post.post_url,
-                });
-                // Fetch influencer_username for YouTube as well
-                const { data: influencer } = await supabase
-                  .from('influencers')
-                  .select('influencer_username')
-                  .eq('id', post.influencer_id)
-                  .single();
-                const displayName = influencer?.influencer_username || '-';
-                return { ...post, realTime: ytResp.data, influencerUsername: displayName };
-              } catch (e: any) {
-                return { ...post, realTime: null, error: e?.response?.data?.error || 'Failed to fetch YT data' };
-              }
-            } else {
-              // Fetch influencer_username for other platforms as well
-              const { data: influencer } = await supabase
-                .from('influencers')
-                .select('influencer_username')
-                .eq('id', post.influencer_id)
-                .single();
-              const displayName = influencer?.influencer_username || '-';
-              return { ...post, realTime: null, influencerUsername: displayName };
-            }
-          })
-        );
+        
+        const enrichedPosts = (promoPosts || []).map((post: any) => ({
+          ...post,
+          influencerUsername: post.influencers?.influencer_username || 'Unknown',
+          realTime: {
+            views: post.views,
+            likes: post.likes,
+            comments: post.comments,
+          },
+        }));
+
         setPosts(enrichedPosts);
+
+        // Now, fetch live data for all posts
+        enrichedPosts.forEach(post => fetchPostStats(post));
+
       } catch (err: any) {
         setPostsError(err.message || 'Failed to fetch campaign posts');
       } finally {
         setPostsLoading(false);
       }
     }
-    fetchPosts();
+    fetchInitialPosts();
   }, [id]);
 
   // Prepare data for charts
   const engagementData = posts.map(post => ({
-    name: post.realTime?.caption || post.realTime?.title || 'Post',
+    name: post.influencerUsername || 'Post',
     likes: Number(post.realTime?.like_count || post.realTime?.likes || 0),
     comments: Number(post.realTime?.comments_count || post.realTime?.comments || 0),
+    views: Number(post.realTime?.view_count || post.realTime?.views || 0),
     platform: post.platform,
     influencer: post.influencerUsername,
     date: post.realTime?.timestamp || post.realTime?.publishedAt || '-',
@@ -154,9 +183,11 @@ export default function CampaignDetails() {
       const name = post.influencerUsername || 'Unknown';
       const likes = Number(post.realTime?.like_count || post.realTime?.likes || 0);
       const comments = Number(post.realTime?.comments_count || post.realTime?.comments || 0);
-      acc[name] = acc[name] || { name, likes: 0, comments: 0 };
+      const views = Number(post.realTime?.view_count || post.realTime?.views || 0);
+      acc[name] = acc[name] || { name, likes: 0, comments: 0, views: 0 };
       acc[name].likes += likes;
       acc[name].comments += comments;
+      acc[name].views += views;
       return acc;
     }, {})
   );
@@ -199,83 +230,45 @@ export default function CampaignDetails() {
                   <div className="animate-pulse text-center py-8 text-lg text-gray-500">Loading posts...</div>
                 ) : postsError ? (
                   <div className="text-center py-8 text-red-600">{postsError}</div>
-                ) : posts.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">No promo posts found for this campaign.</div>
+                ) : posts.length > 0 ? (
+                  <ul className="space-y-4">
+                    {posts.map(post => (
+                      <li key={post.id} className="p-4 bg-gray-50 rounded-lg flex items-center justify-between gap-4">
+                        <div className="flex-grow">
+                          <p className="font-semibold">{post.influencerUsername}</p>
+                          <a
+                            href={
+                              post.platform === 'Instagram'
+                                ? `https://www.instagram.com/p/${post.post_url}`
+                                : post.post_url
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-500 hover:underline truncate"
+                          >
+                            {post.platform === 'Instagram'
+                              ? `instagram.com/p/${post.post_url}`
+                              : post.post_url}
+                          </a>
+                          <div className="flex items-center gap-4 text-sm text-gray-600 mt-2">
+                            <span>Likes: {post.realTime?.likes ?? 'N/A'}</span>
+                            <span>Comments: {post.realTime?.comments ?? 'N/A'}</span>
+                            <span>Views: {post.realTime?.views ?? 'N/A'}</span>
+                          </div>
+                          {post.error && <p className="text-xs text-red-500 mt-1">{post.error}</p>}
+                          {post.last_monitored && <p className="text-xs text-gray-400 mt-1">Last updated: {new Date(post.last_monitored).toLocaleString()}</p>}
+                        </div>
+                        <button
+                          onClick={() => fetchPostStats(post)}
+                          className="px-3 py-1.5 bg-indigo-500 text-white rounded-md text-sm hover:bg-indigo-600 disabled:bg-indigo-300"
+                        >
+                          Refresh Stats
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full border rounded-xl overflow-hidden bg-white">
-                      <thead>
-                        <tr className="bg-gray-100 text-gray-700 text-left">
-                          <th className="py-3 px-4">Platform</th>
-                          <th className="py-3 px-4">Influencer</th>
-                          <th className="py-3 px-4">Preview</th>
-                          <th className="py-3 px-4">Likes</th>
-                          <th className="py-3 px-4">Comments</th>
-                          <th className="py-3 px-4">Date</th>
-                          <th className="py-3 px-4">Link</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {posts.map((post, idx) => (
-                          <tr key={idx} className="border-b hover:bg-blue-50 transition">
-                            <td className="py-3 px-4 font-medium">{post.platform}</td>
-                            <td className="py-3 px-4">{post.influencerUsername || '-'}</td>
-                            <td className="py-3 px-4">
-                              {post.platform === 'Instagram' && post.realTime ? (
-                                post.realTime.media_type === 'IMAGE' || post.realTime.media_type === 'CAROUSEL_ALBUM' ? (
-                                  <img src={post.realTime.media_url} alt="Instagram Post" className="w-20 h-20 object-cover rounded" />
-                                ) : post.realTime.media_type === 'VIDEO' ? (
-                                  <video src={post.realTime.media_url} controls className="w-20 h-20 rounded" />
-                                ) : null
-                              ) : post.platform === 'YouTube' && post.realTime ? (
-                                post.realTime.thumbnailUrl ? (
-                                  <img src={post.realTime.thumbnailUrl} alt="YouTube Thumbnail" className="w-20 h-20 object-cover rounded" />
-                                ) : (
-                                  <span className="font-semibold">{post.realTime.title}</span>
-                                )
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4">
-                              {post.platform === 'Instagram'
-                                ? post.realTime?.like_count ?? '-'
-                                : post.platform === 'YouTube'
-                                ? post.realTime?.likes ?? '-'
-                                : '-'}
-                            </td>
-                            <td className="py-3 px-4">
-                              {post.platform === 'Instagram'
-                                ? post.realTime?.comments_count ?? '-'
-                                : post.platform === 'YouTube'
-                                ? post.realTime?.comments ?? '-'
-                                : '-'}
-                            </td>
-                            <td className="py-3 px-4">
-                              {post.platform === 'Instagram'
-                                ? post.realTime?.timestamp
-                                  ? new Date(post.realTime.timestamp).toLocaleDateString()
-                                  : '-'
-                                : post.platform === 'YouTube'
-                                ? post.realTime?.publishedAt
-                                  ? new Date(post.realTime.publishedAt).toLocaleDateString()
-                                  : '-'
-                                : '-'}
-                            </td>
-                            <td className="py-3 px-4">
-                              {post.platform === 'Instagram' && post.realTime ? (
-                                <a href={post.realTime.permalink} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Instagram</a>
-                              ) : post.platform === 'YouTube' && post.realTime ? (
-                                <a href={`https://www.youtube.com/watch?v=${post.realTime.id}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">YouTube</a>
-                              ) : (
-                                <a href={post.post_url} target="_blank" rel="noopener noreferrer" className="text-gray-400 underline">Link</a>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <div className="text-center py-8 text-gray-500">No promotional posts submitted for this campaign yet.</div>
                 )}
               </div>
               {/* Charts Section - only show when data is loaded and posts exist */}
@@ -300,6 +293,7 @@ export default function CampaignDetails() {
                           <Legend />
                           <Bar dataKey="likes" fill="#6366f1" name="Likes" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="comments" fill="#06b6d4" name="Comments" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="views" fill="#f59e42" name="Views" radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -330,14 +324,15 @@ export default function CampaignDetails() {
                     <div className="bg-white rounded-xl shadow p-6">
                       <h3 className="font-bold mb-4 text-lg text-gray-800">Top Influencers by Engagement</h3>
                       <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={influencerEngagement} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                        <BarChart data={influencerEngagement as any[]}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="name" />
                           <YAxis />
                           <Tooltip />
                           <Legend />
-                          <Bar dataKey="likes" fill="#f59e42" name="Likes" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="comments" fill="#f43f5e" name="Comments" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="likes" fill="#8884d8" />
+                          <Bar dataKey="comments" fill="#82ca9d" />
+                          <Bar dataKey="views" fill="#ffc658" />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
