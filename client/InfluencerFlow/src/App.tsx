@@ -104,6 +104,59 @@ function InfluencerProfileGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Brand profile completion check
+function isBrandProfileComplete(profile: any) {
+  return (
+    profile &&
+    typeof profile.brand_name === 'string' && profile.brand_name.trim().length > 0 &&
+    typeof profile.brand_description === 'string' && profile.brand_description.trim().length > 0 &&
+    typeof profile.location === 'string' && profile.location.trim().length > 0
+  );
+}
+
+function BrandProfileGuard({ children }: { children: React.ReactNode }) {
+  const [checking, setChecking] = useState(true);
+  const [shouldRedirect, setShouldRedirect] = useState(false);
+  const [profileChecked, setProfileChecked] = useState(false);
+  const navigate = useNavigate();
+  useEffect(() => {
+    const checkProfile = async () => {
+      setChecking(true);
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData.session?.user?.id;
+        if (!userId) {
+          setShouldRedirect(true);
+          setChecking(false);
+          return;
+        }
+        const { data: profileData, error } = await supabase
+          .from('brands')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        if (!profileData || error || !isBrandProfileComplete(profileData)) {
+          setShouldRedirect(true);
+        }
+      } catch (e) {
+        setShouldRedirect(true);
+      } finally {
+        setChecking(false);
+        setProfileChecked(true);
+      }
+    };
+    checkProfile();
+  }, []);
+  useEffect(() => {
+    if (!checking && shouldRedirect && profileChecked) {
+      navigate('/brand-profile-setup', { replace: true });
+    }
+  }, [checking, shouldRedirect, profileChecked, navigate]);
+  if (checking) return <LoadingScreen />;
+  if (shouldRedirect) return null;
+  return <>{children}</>;
+}
+
 function AppContent() {
   const location = useLocation();
   const dispatch = useDispatch();
@@ -373,7 +426,7 @@ function AppContent() {
             <ProtectedRoute isLoggedIn={isLoggedIn} isLoading={isLoading}>
               {userTypeRedux === 'influencer'
                 ? <Navigate to="/creator/dashboard" replace />
-                : <BrandDashboard />
+                : <BrandProfileGuard><BrandDashboard /></BrandProfileGuard>
               }
             </ProtectedRoute>
           }
