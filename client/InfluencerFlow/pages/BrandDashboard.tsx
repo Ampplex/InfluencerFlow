@@ -216,6 +216,7 @@ const BrandDashboard = () => {
             campaignId: campaign.id,
             query: campaign.campaign_name + ' ' + campaign.description,
             limit: 10,
+            campaign_description: campaign.description
           },
         });
         break;
