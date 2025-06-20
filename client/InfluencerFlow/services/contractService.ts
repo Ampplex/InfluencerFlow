@@ -1,4 +1,4 @@
-import { Contract, ContractTemplate, SignContractRequest } from '../types/contract';
+import { Contract, ContractTemplate } from '../types/contract';
 import supabase from '../utils/supabase';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://influencerflow-r8bs.onrender.com';
@@ -114,26 +114,5 @@ export const contractService = {
     }
 
     return response.json();
-  },
-
-  // Helper function to get current user's role and ID
-  getCurrentUser: async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      throw new Error('No authenticated user');
-    }
-
-    // Get user's brand info
-    const { data: brandData } = await supabase
-      .from('brands')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-
-    return {
-      userId: session.user.id,
-      role: brandData ? 'brand' : 'influencer',
-      brandName: brandData?.brand_name || ''
-    };
   }
-}; 
+};

@@ -16,7 +16,9 @@ import {
   Bot,
   Languages,
   BarChart3,
-  Sparkles
+  Sparkles,
+  Zap,
+  CheckCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -128,7 +130,6 @@ CardContent.displayName = "CardContent";
 
 // Sparkles Core Component
 interface ParticlesProps {
-  id?: string;
   className?: string;
   background?: string;
   particleSize?: number;
@@ -141,7 +142,6 @@ interface ParticlesProps {
 
 const SparklesCore = (props: ParticlesProps) => {
   const {
-    id,
     className,
     background,
     minSize = 0.4,
