@@ -110,6 +110,7 @@ interface AuthResponse {
     accountActivated?: boolean;
     emailVerificationRequired?: boolean;
     emailVerified?: boolean;
+    profileExists?: boolean;
   };
   error?: string;
 }
@@ -734,78 +735,63 @@ const handleInfluencerSignup = async (
 
 const handleEmailLogin = async (email: string, password: string, userType: 'brand' | 'influencer'): Promise<AuthResponse> => {
   try {
-    console.log(`Attempting ${userType} login for ${email}`);
+    console.log(`Processing email login for ${userType}: ${email}`);
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase(),
-      password: password
+      email: email.trim().toLowerCase(),
+      password: password,
     });
 
-    if (error || !data.user) {
-      console.error('Login error:', error);
-      return {
-        success: false,
-        error: 'Invalid email or password. Please check your credentials and try again.'
-      };
+    if (error) {
+      console.error('Supabase signIn error:', error.message);
+      return { success: false, error: 'Invalid email or password.' };
     }
 
-    // Verify user type matches
-    const userMetaType = data.user.user_metadata?.userType;
-    if (userMetaType && userMetaType !== userType) {
-      return {
-        success: false,
-        error: `This account is registered as a ${userMetaType}. Please use the correct login tab.`
-      };
-    }
-
-    let userName = '';
-    let brandName = '';
-    let username = '';
-
-    if (userType === 'brand') {
-      // Get brand info from early_access_requests
-      const { data: brandData } = await supabase
-        .from('early_access_requests')
-        .select('name, brand')
-        .eq('email', email.toLowerCase())
-        .single();
+    if (data.session) {
+      const { user, session } = data;
       
-      userName = brandData?.name || '';
-      brandName = brandData?.brand || '';
-    } else {
-      // Get influencer info
-      const { data: influencerData } = await supabase
-        .from('influencers')
-        .select('influencer_username')
-        .eq('influencer_email', email.toLowerCase())
-        .single();
-      
-      username = influencerData?.influencer_username || data.user.user_metadata?.username || '';
-    }
+      const responseUser: AuthResponse['user'] = {
+          id: user.id,
+          email: user.email!,
+          userType: userType,
+          requiresPasswordSetup: false,
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token,
+          profileExists: false, // Default to false
+      };
 
-    console.log(`${userType} login successful for ${email}`);
+      if (userType === 'brand') {
+        console.log(`Checking for existing profile for brand ID: ${user.id}`);
+        const { data: brandProfile, error: dbError } = await supabase
+          .from('brands')
+          .select('id')
+          .eq('id', user.id)
+          .single();
 
-    return {
-      success: true,
-      user: {
-        id: data.user.id,
-        email: data.user.email || '',
-        name: userName,
-        brand: brandName,
-        username: username,
-        userType: userType,
-        requiresPasswordSetup: false,
-        accessToken: data.session?.access_token,
-        refreshToken: data.session?.refresh_token,
-        accountActivated: true
+        if (dbError && dbError.code !== 'PGRST116') { // Ignore "no rows found" error
+          console.error('Error checking for brand profile:', dbError);
+        }
+        
+        responseUser.profileExists = !!brandProfile;
+        console.log(`Profile exists for brand ${user.id}: ${!!brandProfile}`);
+      } else {
+          // For influencers, this check is handled robustly in App.tsx.
+          // We set it to true so their login flow is not affected.
+          responseUser.profileExists = true; 
       }
-    };
-  } catch (error) {
-    console.error('Email login error:', error);
-    return {
-      success: false,
-      error: 'Login failed. Please try again.'
-    };
+      
+      return {
+        success: true,
+        user: responseUser,
+      };
+    }
+
+    // Default failure case
+    return { success: false, error: 'Login failed. Please try again.' };
+
+  } catch (err: any) {
+    console.error('Unhandled error in handleEmailLogin:', err);
+    return { success: false, error: 'An unexpected error occurred.' };
   }
 };
 

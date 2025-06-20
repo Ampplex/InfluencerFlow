@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../utils/supabase';
-import { motion } from 'framer-motion';
 import { 
   Phone, 
   Instagram, 
   Youtube, 
-  Twitter,
-  Linkedin,
-  Globe,
+  Twitter, 
+  Linkedin, 
+  Globe, 
   CheckCircle, 
   AlertCircle,
   ArrowRight,
@@ -19,109 +19,26 @@ import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 
-// Interface for platform links
-export interface PlatformLink {
+interface PlatformLink {
   platform: string;
   url: string;
 }
 
-// Helper function to get current user ID
-export const getCurrentUserId = async (): Promise<string | null> => {
-  try {
-    const { data: sessionData, error } = await supabase.auth.getSession();
-    if (error) {
-      console.error('Error getting session:', error);
-      return null;
-    }
-    return sessionData.session?.user?.id || null;
-  } catch (error) {
-    console.error('Error in getCurrentUserId:', error);
-    return null;
-  }
-};
-
-// Function to upsert influencer profile using real Supabase
-export const upsertInfluencerProfile = async (profile: any, authToken: string) => {
-  console.log('Updating profile for user:', profile.id);
-  console.log('Using auth token:', authToken ? 'present' : 'missing');
-  console.log('Profile data:', {
-    bio: profile.bio ? 'set' : 'empty',
-    phone: profile.phone_num ? 'set' : 'empty',
-    platforms: profile.platforms ? JSON.parse(profile.platforms).length + ' platforms' : 'no platforms'
-  });
-
-  if (!profile.id) {
-    throw new Error('User ID is required');
-  }
-
-  if (!authToken) {
-    throw new Error('Authentication token is required');
-  }
-
-  // Check if profile exists
-  const { data: existingData } = await supabase
-    .from('influencers')
-    .select('id')
-    .eq('id', profile.id)
-    .single();
-
-  let result;
-  if (existingData) {
-    // Update existing profile - removed updated_at since column doesn't exist
-    const { data, error } = await supabase
-      .from('influencers')
-      .update({
-        bio: profile.bio,
-        phone_num: profile.phone_num,
-        platforms: profile.platforms
-      })
-      .eq('id', profile.id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    result = data;
-  } else {
-    // Insert new profile - removed updated_at and created_at since created_at has DEFAULT
-    const { data, error } = await supabase
-      .from('influencers')
-      .insert({
-        id: profile.id,
-        influencer_username: profile.username || 'user_' + profile.id.slice(0, 8), // Add required username
-        influencer_email: profile.email || '', // Add required email
-        bio: profile.bio,
-        phone_num: profile.phone_num,
-        platforms: profile.platforms
-      })
-      .select()
-      .single();
-    
-    if (error) throw error;
-    result = data;
-  }
-
-  console.log('Profile updated successfully:', {
-    userId: profile.id,
-    hasBio: !!profile.bio,
-    hasPhone: !!profile.phone_num,
-    platformCount: profile.platforms ? JSON.parse(profile.platforms).length : 0
-  });
-
-  return { ok: true, json: async () => result };
-};
-
-// Error logging function
-export const logOnboardingError = (component: string, error: any) => {
-  console.error(`${component} Error:`, error);
-  if (error.stack) {
-    console.error('Error stack:', error.stack);
-  }
-};
+interface InfluencerProfile {
+  id: string;
+  bio: string;
+  phone_num: string;
+  platforms: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 const InfluencerProfileSetup: React.FC = () => {
   const navigate = useNavigate();
   
   // State for form fields
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
   const [phone, setPhone] = useState('');
   const [platforms, setPlatforms] = useState<PlatformLink[]>([
@@ -136,49 +53,94 @@ const InfluencerProfileSetup: React.FC = () => {
   const [error, setError] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
+  const [existingProfile, setExistingProfile] = useState<InfluencerProfile | null>(null);
+  const [profileValidation, setProfileValidation] = useState({
+    usernameValid: false,
+    emailValid: false,
+    bioValid: false,
+    phoneValid: false,
+    platformsValid: false
+  });
   
-  // Get current user on component mount
+  // Get current user and existing profile on component mount
   useEffect(() => {
-    const checkCurrentUser = async () => {
-      const id = await getCurrentUserId();
-      if (id) {
-        setUserId(id);
+    const fetchUserAndProfile = async () => {
+      setLoading(true);
+      setError('');
+      
+      try {
+        // Get current session
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
         
-        // Fetch existing profile data if available
-        try {
-          const { data: profileData, error: profileError } = await supabase
-            .from('influencers')
-            .select('*')
-            .eq('id', id)
-            .single();
+        const uid = sessionData.session?.user?.id;
+        if (!uid) {
+          throw new Error('User not authenticated');
+        }
+        
+        setUserId(uid);
+        setEmail(sessionData.session?.user?.email || '');
+        
+        // Fetch existing influencer profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('influencers')
+          .select('*')
+          .eq('id', uid)
+          .single();
+        
+        if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
+          console.error('Error fetching profile:', profileError);
+          // Don't throw here, profile might not exist yet
+        }
+        
+        if (profileData) {
+          setExistingProfile(profileData);
+          if (profileData.influencer_username) setUsername(profileData.influencer_username);
+          if (profileData.influencer_email) setEmail(profileData.influencer_email);
+          // Pre-populate form with existing data
+          if (profileData.bio) setBio(profileData.bio);
+          if (profileData.phone_num) setPhone(profileData.phone_num);
           
-          if (profileData && !profileError) {
-            // Pre-populate form with existing data
-            if (profileData.bio) setBio(profileData.bio);
-            if (profileData.phone_num) setPhone(profileData.phone_num);
-            
-            if (profileData.platforms) {
-              try {
-                const existingPlatforms = JSON.parse(profileData.platforms);
-                const updatedPlatforms = platforms.map(platform => {
-                  const existing = existingPlatforms.find((ep: PlatformLink) => ep.platform === platform.platform);
-                  return existing || platform;
-                });
-                setPlatforms(updatedPlatforms);
-              } catch (e) {
-                console.error('Error parsing existing platforms:', e);
-              }
+          if (profileData.platforms) {
+            try {
+              const existingPlatforms = JSON.parse(profileData.platforms);
+              const updatedPlatforms = platforms.map(platform => {
+                const existing = existingPlatforms.find((ep: PlatformLink) => ep.platform === platform.platform);
+                return existing || platform;
+              });
+              setPlatforms(updatedPlatforms);
+            } catch (e) {
+              console.error('Error parsing existing platforms:', e);
             }
           }
-        } catch (error) {
-          console.error('Error fetching existing profile:', error);
         }
-      } else {
-        navigate('/auth?tab=influencer');
+        
+      } catch (err: any) {
+        console.error('Error in fetchUserAndProfile:', err);
+        setError(err.message || 'Failed to load user data');
+        
+        // Redirect to auth if not authenticated
+        if (err.message?.includes('not authenticated')) {
+          navigate('/auth?tab=influencer');
+        }
+      } finally {
+        setLoading(false);
       }
     };
-    checkCurrentUser();
+    
+    fetchUserAndProfile();
   }, [navigate]);
+
+  // Real-time profile validation
+  useEffect(() => {
+    setProfileValidation({
+      usernameValid: username.trim().length >= 3 && !username.includes(' '),
+      emailValid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+      bioValid: bio.trim().length >= 20,
+      phoneValid: /^\d{7,20}$/.test(phone),
+      platformsValid: platforms.some(p => p.url.trim() !== '')
+    });
+  }, [username, email, bio, phone, platforms]);
   
   const handlePlatformChange = (index: number, value: string) => {
     const updatedPlatforms = [...platforms];
@@ -186,8 +148,118 @@ const InfluencerProfileSetup: React.FC = () => {
     setPlatforms(updatedPlatforms);
   };
   
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateProfileData = (profile: Partial<InfluencerProfile>) => {
+    const errors = [];
+    
+    if (!username || username.trim().length < 3 || username.includes(' ')) {
+      errors.push('Username must be at least 3 characters and contain no spaces');
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push('A valid email is required');
+    }
+    if (!profile.bio || profile.bio.trim().length < 20) {
+      errors.push('Bio must be at least 20 characters long');
+    }
+    if (!profile.phone_num || !/^\d{7,20}$/.test(profile.phone_num)) {
+      errors.push('Phone number must be 7-20 digits');
+    }
+    const platformData = JSON.parse(profile.platforms || '[]');
+    if (platformData.length === 0) {
+      errors.push('At least one social media platform is required');
+    }
+    
+    return errors;
+  };
+  
+  const upsertInfluencerProfile = async (profile: Partial<InfluencerProfile>) => {
+    console.log('Updating profile for user:', profile.id);
+    console.log('Profile data:', {
+      bio: profile.bio ? 'set' : 'empty',
+      phone: profile.phone_num ? 'set' : 'empty',
+      platforms: profile.platforms ? JSON.parse(profile.platforms).length + ' platforms' : 'no platforms'
+    });
+
+    if (!profile.id) {
+      throw new Error('User ID is required');
+    }
+
+    // Validate profile data before sending
+    const validationErrors = validateProfileData(profile);
+    if (validationErrors.length > 0) {
+      throw new Error(validationErrors.join('. '));
+    }
+
+    // Check if profile exists
+    const { data: existingData } = await supabase
+      .from('influencers')
+      .select('id')
+      .eq('id', profile.id)
+      .single();
+
+    let result;
+    if (existingData) {
+      // Update existing profile
+      const { data, error } = await supabase
+        .from('influencers')
+        .update({
+          influencer_username: username.trim(),
+          influencer_email: email.trim(),
+          bio: profile.bio,
+          phone_num: profile.phone_num,
+          platforms: profile.platforms,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', profile.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      result = data;
+    } else {
+      // Insert new profile
+      const { data, error } = await supabase
+        .from('influencers')
+        .insert({
+          id: profile.id,
+          influencer_username: username.trim(),
+          influencer_email: email.trim(),
+          bio: profile.bio,
+          phone_num: profile.phone_num,
+          platforms: profile.platforms,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      result = data;
+    }
+
+    console.log('Profile updated successfully:', {
+      userId: profile.id,
+      hasBio: !!profile.bio,
+      hasPhone: !!profile.phone_num,
+      platformCount: profile.platforms ? JSON.parse(profile.platforms).length : 0
+    });
+
+    return result;
+  };
+
+  const logOnboardingError = (component: string, error: any) => {
+    console.error(`${component} Error:`, error);
+    
+    // Send error to monitoring service (if available)
+    if (process.env.NODE_ENV === 'production') {
+      // Example: Sentry.captureException(error);
+    }
+    
+    if (error.stack) {
+      console.error('Error stack:', error.stack);
+    }
+  };
+  
+  const handleSubmit = async () => {
     setPhoneError('');
     setError('');
     
@@ -196,6 +268,14 @@ const InfluencerProfileSetup: React.FC = () => {
       return;
     }
     
+    if (!username || username.trim().length < 3 || username.includes(' ')) {
+      setError('Username must be at least 3 characters and contain no spaces.');
+      return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('A valid email is required.');
+      return;
+    }
     // Phone validation: 7-20 digits
     if (!phone || !/^\d{7,20}$/.test(phone)) {
       setPhoneError('Please enter a valid phone number (7-20 digits, numbers only).');
@@ -218,32 +298,47 @@ const InfluencerProfileSetup: React.FC = () => {
     setLoading(true);
     
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const authToken = sessionData.session?.access_token;
-      if (!authToken) throw new Error('No authentication token available');
-      
       const platformsJson = JSON.stringify(activePlatforms);
-      const profile = {
+      const profile: Partial<InfluencerProfile> = {
         id: userId,
         bio: bio.trim(),
-        phone_num: phone, // Save as string
+        phone_num: phone,
         platforms: platformsJson,
       };
       
-      const response = await upsertInfluencerProfile(profile, authToken);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Failed to update profile: ${JSON.stringify(errorData)}`);
+      // Update profile using real Supabase call
+      const result = await upsertInfluencerProfile(profile);
+      
+      if (result) {
+        // Mark profile setup as completed
+        sessionStorage.setItem('profileSetupCompleted', 'true');
+        
+        console.log('Profile setup completed successfully, redirecting to dashboard...');
+        
+        // Force a hard navigation to the dashboard.
+        // This ensures App.tsx re-runs its auth and profile completion checks from scratch.
+        window.location.href = '/dashboard';
+
+      } else {
+        throw new Error('Failed to update profile - no data returned');
       }
       
-      sessionStorage.setItem('profileSetupCompleted', 'true');
-      
-      // Navigate to creator dashboard
-      navigate('/creator/dashboard');
-      
     } catch (err: any) {
-      setError(err.message || 'Failed to update profile');
+      console.error('Profile update error:', err);
       logOnboardingError('InfluencerProfileSetup', err);
+      
+      // Enhanced error handling based on error type
+      if (err.message?.includes('duplicate key')) {
+        setError('Profile already exists. Please try updating instead.');
+      } else if (err.message?.includes('validation')) {
+        setError('Profile validation failed. Please check your inputs.');
+      } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
+        setError('Network error. Please check your connection and try again.');
+      } else if (err.message?.includes('permission')) {
+        setError('Permission denied. Please make sure you are logged in.');
+      } else {
+        setError(err.message || 'Failed to update profile. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -272,7 +367,23 @@ const InfluencerProfileSetup: React.FC = () => {
   };
 
   const completedPlatforms = platforms.filter(p => p.url.trim() !== '').length;
-  const progressPercentage = ((bio ? 1 : 0) + (phone ? 1 : 0) + (completedPlatforms > 0 ? 1 : 0)) / 3 * 100;
+  const progressPercentage = ((profileValidation.bioValid ? 1 : 0) + (profileValidation.phoneValid ? 1 : 0) + (profileValidation.platformsValid ? 1 : 0)) / 3 * 100;
+  const canSubmit = profileValidation.usernameValid && profileValidation.emailValid && profileValidation.bioValid && profileValidation.phoneValid && profileValidation.platformsValid && !loading;
+
+  // Loading state for initial data fetch
+  if (loading && !userId) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 animate-pulse">
+            <Users className="w-8 h-8 text-white" />
+          </div>
+          <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">Loading Profile Setup</h3>
+          <p className="text-slate-600 dark:text-slate-400">Fetching your account data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
@@ -283,7 +394,6 @@ const InfluencerProfileSetup: React.FC = () => {
         transition={{ duration: 0.5 }}
       >
         {/* Header */}
-        
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-8">
             <div className="w-8 h-8 mr-3">
@@ -304,13 +414,13 @@ const InfluencerProfileSetup: React.FC = () => {
             transition={{ duration: 0.5, delay: 0.1 }}
           >
             <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-3 tracking-tight">
-              Complete Your Creator Profile
+              {existingProfile ? 'Update Your Creator Profile' : 'Complete Your Creator Profile'}
             </h1>
             <p className="font-mono text-sm text-slate-600 dark:text-slate-400 mb-6">
               // Tell brands about yourself and showcase your social presence
             </p>
 
-            {/* Progress Bar */}
+            {/* Enhanced Progress Bar with Validation States */}
             <div className="max-w-md mx-auto mb-8">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-mono text-slate-600 dark:text-slate-400">
@@ -326,13 +436,28 @@ const InfluencerProfileSetup: React.FC = () => {
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
+              
+              {/* Validation Indicators */}
+              <div className="flex justify-between mt-3 text-xs">
+                <div className={`flex items-center gap-1 ${profileValidation.bioValid ? 'text-green-600' : 'text-slate-400'}`}>
+                  {profileValidation.bioValid ? <CheckCircle className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border border-current" />}
+                  <span className="font-mono">bio</span>
+                </div>
+                <div className={`flex items-center gap-1 ${profileValidation.phoneValid ? 'text-green-600' : 'text-slate-400'}`}>
+                  {profileValidation.phoneValid ? <CheckCircle className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border border-current" />}
+                  <span className="font-mono">contact</span>
+                </div>
+                <div className={`flex items-center gap-1 ${profileValidation.platformsValid ? 'text-green-600' : 'text-slate-400'}`}>
+                  {profileValidation.platformsValid ? <CheckCircle className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border border-current" />}
+                  <span className="font-mono">social</span>
+                </div>
+              </div>
             </div>
           </motion.div>
         </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-lg">
-          <form onSubmit={handleSubmit} className="space-y-8">
-            
+          <div className="space-y-8">
             {/* Bio Section */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -344,24 +469,66 @@ const InfluencerProfileSetup: React.FC = () => {
               </div>
               
               <div className="pl-4 space-y-4">
+                {/* Username Field */}
+                <div>
+                  <label className="block text-sm font-mono font-medium text-slate-700 dark:text-slate-300 mb-1">Username</label>
+                  <input
+                    type="text"
+                    className={`w-full px-4 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm transition-colors ${
+                      username.length > 0 && !profileValidation.usernameValid
+                        ? 'border-red-300 dark:border-red-600'
+                        : profileValidation.usernameValid
+                          ? 'border-green-300 dark:border-green-600'
+                          : 'border-slate-300 dark:border-slate-600'
+                    }`}
+                    placeholder="your_unique_username"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    required
+                    minLength={3}
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className={`text-xs font-mono ${
+                      username.length >= 3 && !username.includes(' ')
+                        ? 'text-green-600'
+                        : username.length > 0
+                          ? 'text-orange-600'
+                          : 'text-slate-400'
+                    }`}>
+                      {username.length}/3
+                    </span>
+                    {username.includes(' ') && (
+                      <span className="text-xs text-red-600 font-mono">No spaces allowed</span>
+                    )}
+                  </div>
+                </div>
                 <div className="flex items-center space-x-3 mb-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center">
-                    <Edit3 className="w-5 h-5 text-white" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    profileValidation.bioValid 
+                      ? 'bg-gradient-to-r from-green-500 to-blue-500' 
+                      : 'bg-gradient-to-r from-blue-500 to-purple-500'
+                  }`}>
+                    {profileValidation.bioValid ? <CheckCircle className="w-5 h-5 text-white" /> : <Edit3 className="w-5 h-5 text-white" />}
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                       About You
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Tell brands what makes you unique
+                      Tell brands what makes you unique (min. 20 characters)
                     </p>
                   </div>
                 </div>
 
                 <textarea
-                  id="bio"
                   rows={4}
-                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm"
+                  className={`w-full px-4 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm transition-colors ${
+                    bio.length > 0 && !profileValidation.bioValid 
+                      ? 'border-red-300 dark:border-red-600' 
+                      : profileValidation.bioValid 
+                        ? 'border-green-300 dark:border-green-600'
+                        : 'border-slate-300 dark:border-slate-600'
+                  }`}
                   placeholder="I'm a lifestyle content creator focused on authentic brand partnerships. My audience loves fashion, travel, and wellness content..."
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
@@ -395,24 +562,51 @@ const InfluencerProfileSetup: React.FC = () => {
               </div>
               
               <div className="pl-4 space-y-4">
+                {/* Email Field */}
+                <div>
+                  <label className="block text-sm font-mono font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
+                  <input
+                    type="email"
+                    className={`w-full px-4 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm transition-colors ${
+                      email.length > 0 && !profileValidation.emailValid
+                        ? 'border-red-300 dark:border-red-600'
+                        : profileValidation.emailValid
+                          ? 'border-green-300 dark:border-green-600'
+                          : 'border-slate-300 dark:border-slate-600'
+                    }`}
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
                 <div className="flex items-center space-x-3 mb-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-blue-500 rounded-xl flex items-center justify-center">
-                    <Phone className="w-5 h-5 text-white" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    profileValidation.phoneValid 
+                      ? 'bg-gradient-to-r from-green-500 to-blue-500' 
+                      : 'bg-gradient-to-r from-green-500 to-blue-500'
+                  }`}>
+                    {profileValidation.phoneValid ? <CheckCircle className="w-5 h-5 text-white" /> : <Phone className="w-5 h-5 text-white" />}
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                       Phone Number
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                      For important campaign communications
+                      For important campaign communications (7-20 digits)
                     </p>
                   </div>
                 </div>
 
                 <input
                   type="tel"
-                  id="phone"
-                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono"
+                  className={`w-full px-4 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono transition-colors ${
+                    phone.length > 0 && !profileValidation.phoneValid 
+                      ? 'border-red-300 dark:border-red-600' 
+                      : profileValidation.phoneValid 
+                        ? 'border-green-300 dark:border-green-600'
+                        : 'border-slate-300 dark:border-slate-600'
+                  }`}
                   placeholder="+1234567890"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
@@ -449,15 +643,19 @@ const InfluencerProfileSetup: React.FC = () => {
               
               <div className="pl-4 space-y-6">
                 <div className="flex items-center space-x-3 mb-6">
-                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-                    <Users className="w-5 h-5 text-white" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    profileValidation.platformsValid 
+                      ? 'bg-gradient-to-r from-green-500 to-purple-500' 
+                      : 'bg-gradient-to-r from-purple-500 to-pink-500'
+                  }`}>
+                    {profileValidation.platformsValid ? <CheckCircle className="w-5 h-5 text-white" /> : <Users className="w-5 h-5 text-white" />}
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                       Your Social Presence
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Connect your platforms to showcase your reach
+                      Connect your platforms to showcase your reach ({completedPlatforms} connected)
                     </p>
                   </div>
                 </div>
@@ -548,31 +746,32 @@ const InfluencerProfileSetup: React.FC = () => {
               <HoverBorderGradient
                 containerClassName="rounded-xl"
                 as="button"
-                className={`bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center px-8 py-4 text-base font-medium ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                onClick={(e: React.MouseEvent) => {
-                  if (loading) return;
-                  e.preventDefault();
-                  const form = e.currentTarget.closest('form');
-                  if (form) {
-                    const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-                    form.dispatchEvent(submitEvent);
-                  }
-                }}
+                className={`font-mono flex items-center px-8 py-4 text-base font-medium transition-all ${
+                  canSubmit 
+                    ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900' 
+                    : 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                }`}
+                onClick={canSubmit ? handleSubmit : undefined}
               >
                 {loading ? (
                   <>
                     <div className="w-4 h-4 mr-3 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                    completing_setup...
+                    {existingProfile ? 'updating_profile...' : 'completing_setup...'}
+                  </>
+                ) : canSubmit ? (
+                  <>
+                    {existingProfile ? 'update_profile()' : 'complete_profile()'}
+                    <ArrowRight className="w-4 h-4 ml-3" />
                   </>
                 ) : (
                   <>
-                    complete_profile()
-                    <ArrowRight className="w-4 h-4 ml-3" />
+                    complete_all_fields()
+                    <AlertCircle className="w-4 h-4 ml-3" />
                   </>
                 )}
               </HoverBorderGradient>
             </motion.div>
-          </form>
+          </div>
         </div>
 
         {/* Footer */}
@@ -586,4 +785,4 @@ const InfluencerProfileSetup: React.FC = () => {
   );
 };
 
-export default InfluencerProfileSetup;
+export default InfluencerProfileSetup; 

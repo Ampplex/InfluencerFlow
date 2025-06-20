@@ -92,6 +92,7 @@ const BrandDashboard = () => {
   const [isGeneratingContract, setIsGeneratingContract] = useState(false);
   const [contractPreviewUrl, setContractPreviewUrl] = useState<string | null>(null);
   const [showContractPreview, setShowContractPreview] = useState(false);
+  const [profileChecked, setProfileChecked] = useState(false);
 
   // Get current user and brand data
   useEffect(() => {
@@ -125,6 +126,16 @@ const BrandDashboard = () => {
 
       if (brandData) {
         setCurrentBrand(brandData);
+        // Profile completion check
+        const isProfileComplete = (
+          typeof brandData.brand_name === 'string' && brandData.brand_name.trim().length > 0 &&
+          typeof brandData.location === 'string' && brandData.location.trim().length > 0 &&
+          typeof brandData.brand_description === 'string' && brandData.brand_description.trim().length >= 20
+        );
+        if (!isProfileComplete) {
+          navigate('/brand-profile-setup', { replace: true });
+          return;
+        }
         await fetchCampaigns(brandData.id);
         await fetchContracts(brandData.id);
         await fetchOutreachRecords(brandData.id);
@@ -133,9 +144,11 @@ const BrandDashboard = () => {
         await fetchContracts(userId);
         await fetchOutreachRecords(userId);
       }
+      setProfileChecked(true);
     } catch (err) {
       console.error('Error fetching brand data:', err);
       setError('Failed to load brand data');
+      setProfileChecked(true);
     }
   };
 
@@ -668,6 +681,14 @@ const BrandDashboard = () => {
 
   const stats = calculateStats();
   const recentActivity = generateRecentActivity();
+
+  if (!profileChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-slate-500">Checking brand profile...</div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

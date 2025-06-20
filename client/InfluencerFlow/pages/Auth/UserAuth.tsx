@@ -226,12 +226,12 @@ export function UserLogin() {
         
         setTimeout(() => {
           // Route to appropriate dashboard based on user type
-          const dashboardUrl = userType === 'brand' 
-            ? '/dashboard'                    // Brand dashboard
-            : '/creator/dashboard';           // Creator dashboard
-          
-          // Since we're on same domain, use relative URLs
-          window.location.href = dashboardUrl;
+          if (userType === 'brand') {
+            console.log('Redirecting new brand to /brand-profile-setup after password setup');
+            window.location.href = '/brand-profile-setup';
+          } else {
+            window.location.href = '/creator/dashboard';
+          }
         }, 2000);
       } else {
         setError(result.error || 'Failed to set up password. Please try again.');
@@ -262,33 +262,41 @@ export function UserLogin() {
 
       const result = await response.json();
 
-      if (result.success) {
-        setSuccess('Login successful! Redirecting to your dashboard...');
+      if (result.success && result.user) {
+        setUserInfo(result.user);
         
-        if (result.user?.accessToken) {
+        if (result.user.accessToken) {
+          // This logic seems to be handled by onAuthStateChange, but can be kept for safety
           localStorage.setItem('supabase.auth.token', JSON.stringify({
             access_token: result.user.accessToken,
             refresh_token: result.user.refreshToken,
             user: result.user
           }));
-          // Set Supabase session for global auth state
           await supabase.auth.setSession({
             access_token: result.user.accessToken,
             refresh_token: result.user.refreshToken,
           });
         }
         
+        setSuccess('Login successful! Redirecting...');
+        
         setTimeout(() => {
-          // Route to appropriate dashboard based on user type
-          const dashboardUrl = userType === 'brand' 
-            ? '/dashboard'                    // Brand dashboard
-            : '/creator/dashboard';           // Creator dashboard
-          
-          // Since we're on same domain, use relative URLs
-          window.location.href = dashboardUrl;
+          if (userType === 'brand') {
+            if (result.user.profileExists) {
+              console.log('Brand profile exists, redirecting to /dashboard.');
+              window.location.href = '/dashboard';
+            } else {
+              console.log('Brand profile MISSING, redirecting to /brand-profile-setup.');
+              window.location.href = '/brand-profile-setup';
+            }
+          } else {
+            // Influencer flow is handled by App.tsx logic
+            window.location.href = '/creator/dashboard';
+          }
         }, 1500);
+
       } else {
-        setError(result.error || 'Invalid email or password. Please check your credentials.');
+        setError(result.error || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
       setError('Failed to login. Please check your internet connection and try again.');

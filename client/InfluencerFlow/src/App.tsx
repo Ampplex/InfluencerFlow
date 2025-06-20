@@ -77,13 +77,14 @@ function AppContent() {
 
   useEffect(() => {
     const performInitialAuthCheck = async () => {
-      console.log('performInitialAuthCheck: Starting initial auth check...');
+      console.log('--- performInitialAuthCheck: START ---');
       
       // Check if profile setup was just completed
       const profileSetupCompleted = sessionStorage.getItem('profileSetupCompleted') === 'true';
       if (profileSetupCompleted) {
-        console.log('Profile setup was completed, overriding needsProfileSetup flag');
+        console.log('LOG: Found "profileSetupCompleted" flag in sessionStorage.');
         setNeedsProfileSetup(false);
+        console.log('LOG: setNeedsProfileSetup(false) due to sessionStorage flag.');
         sessionStorage.removeItem('profileSetupCompleted');
       }
       
@@ -139,18 +140,34 @@ function AppContent() {
             }
 
             if (existingInfluencer) {
-              console.log('Influencer exists, checking if profile is complete...');
+              console.log('LOG: Influencer exists in DB. Data:', JSON.stringify(existingInfluencer));
               const profileSetupCompleted = sessionStorage.getItem('profileSetupCompleted') === 'true';
-              
-              if (profileSetupCompleted || (existingInfluencer.bio || existingInfluencer.platforms)) {
-                console.log('Influencer profile is already complete or was just completed');
+              // Strict profile completion check
+              const isProfileComplete = (profile: any) => {
+                const bioValid = profile.bio && profile.bio.trim().length >= 20;
+                const phoneValid = profile.phone_num && /^\d{7,20}$/.test(profile.phone_num);
+                let platformsValid = false;
+                try {
+                  const platformsArr = JSON.parse(profile.platforms || '[]');
+                  platformsValid = Array.isArray(platformsArr) && platformsArr.length > 0 && platformsArr.every(p => p.url && p.url.trim() !== '');
+                } catch {
+                  platformsValid = false;
+                }
+                return bioValid && phoneValid && platformsValid;
+              };
+
+              const isCompleteResult = isProfileComplete(existingInfluencer);
+              console.log(`LOG: isProfileComplete check returned: ${isCompleteResult}`);
+
+              if (profileSetupCompleted || isCompleteResult) {
+                console.log('LOG: Profile is considered complete. Setting needsProfileSetup(false).');
                 setNeedsProfileSetup(false);
               } else {
-                console.log('Influencer profile incomplete, needs setup');
+                console.log('LOG: Profile is considered INCOMPLETE. Setting needsProfileSetup(true).');
                 setNeedsProfileSetup(true);
               }
             } else {
-              console.log('New influencer, needs profile setup');
+              console.log('LOG: New influencer, no record in DB. Setting needsProfileSetup(true).');
               setNeedsProfileSetup(true);
             }
           } catch (dbError) {
@@ -185,17 +202,24 @@ function AppContent() {
           
           if (
             brandProfileSetupCompleted ||
-            (brandProfile && brandProfile.brand_name && brandProfile.brand_description && brandProfile.location)
+            (
+              brandProfile &&
+              typeof brandProfile.brand_name === 'string' && brandProfile.brand_name.trim().length > 0 &&
+              typeof brandProfile.location === 'string' && brandProfile.location.trim().length > 0 &&
+              typeof brandProfile.brand_description === 'string' && brandProfile.brand_description.trim().length >= 20
+            )
           ) {
+            console.log('Brand profile is complete.');
             setNeedsBrandProfileSetup(false);
           } else {
+            console.log('Brand profile is INCOMPLETE.');
             setNeedsBrandProfileSetup(true);
           }
         }
       } catch (error) {
         console.error('Error during initial auth session check:', error);
       } finally {
-        console.log('performInitialAuthCheck: Setting isLoading to false.');
+        console.log('--- performInitialAuthCheck: END ---');
         setIsLoading(false);
       }
     };

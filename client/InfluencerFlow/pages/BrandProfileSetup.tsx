@@ -53,10 +53,31 @@ const BrandProfileSetup: React.FC = () => {
         throw new Error(`Failed to update brand profile: ${errorText}`);
       }
       sessionStorage.setItem('brandProfileSetupCompleted', 'true');
-      navigate('/dashboard', { replace: true });
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 1000);
+      // Poll for updated profile before redirecting
+      const pollForProfileCompletion = async (retries = 5) => {
+        for (let i = 0; i < retries; i++) {
+          const { data: profileData } = await supabase
+            .from('brands')
+            .select('*')
+            .eq('id', userId)
+            .single();
+          if (profileData) {
+            const nameValid = typeof profileData.brand_name === 'string' && profileData.brand_name.trim().length > 0;
+            const descValid = typeof profileData.brand_description === 'string' && profileData.brand_description.trim().length >= 20;
+            const locValid = typeof profileData.location === 'string' && profileData.location.trim().length > 0;
+            if (nameValid && descValid && locValid) {
+              navigate('/dashboard', { replace: true });
+              setTimeout(() => {
+                window.location.href = '/dashboard';
+              }, 500);
+              return;
+            }
+          }
+          await new Promise(res => setTimeout(res, 400));
+        }
+        setError('Profile saved, but not yet available. Please refresh or try again.');
+      };
+      await pollForProfileCompletion();
     } catch (err: any) {
       setError(err.message || 'Failed to update brand profile');
       logOnboardingError('BrandProfileSetup', err);
