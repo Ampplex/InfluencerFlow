@@ -1,7 +1,7 @@
 // pages/ContractManager.tsx
-import React, { useState, useRef, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { FileText, Download, CheckCircle, Clock, XCircle, Upload, User, Building, DollarSign, Calendar, Package, FileSignature, AlertCircle, CreditCard } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { FileText, Download, CheckCircle, Clock, XCircle, FileSignature, AlertCircle, CreditCard } from 'lucide-react';
 import { ContractCreationForm } from '../components/contracts/ContractCreationForm';
 
 // Types matching your Vercel functions
@@ -294,13 +294,11 @@ const ContractForm: React.FC = () => {
 // Main Contract Manager Component
 const ContractManager = () => {
   const params = useParams();
-  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'create' | 'list' | 'detail'>('list');
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const [userRole] = useState<'influencer' | 'brand'>('brand');
   const [userId] = useState('user-123');

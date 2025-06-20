@@ -4,11 +4,6 @@ import { ContractTemplate } from '../../types/contract';
 import { contractService } from '../../services/contractService';
 import supabase from '../../utils/supabase';
 
-interface OutreachRecord {
-  influencer_id: string;
-  influencer_username: string;
-}
-
 interface ContractCreationFormProps {
   onPreview?: (data: ContractTemplate) => void;
   onSubmit?: (data: ContractTemplate) => void;
