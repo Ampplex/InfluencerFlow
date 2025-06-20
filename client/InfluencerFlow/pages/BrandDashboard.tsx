@@ -526,7 +526,7 @@ const BrandDashboard = () => {
     if (outreach) {
       const { error: outreachUpdateError } = await supabase
         .from('outreach')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .update({ status: newStatus })
         .eq('id', outreach.id);
 
       if (outreachUpdateError) {
@@ -572,7 +572,6 @@ const BrandDashboard = () => {
             .update({ 
               final_price: outreach.agreed_price,
               status: 'completed',
-              updated_at: new Date().toISOString(),
               contract_id: contract.id
             })
             .eq('id', campaignId);
@@ -597,7 +596,6 @@ const BrandDashboard = () => {
             .update({ 
               final_price: outreach.agreed_price,
               status: 'completed', 
-              updated_at: new Date().toISOString()
             })
             .eq('id', campaignId);
             
@@ -612,7 +610,7 @@ const BrandDashboard = () => {
     } else {
       const { error: campaignFallbackError } = await supabase
         .from('campaign')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .update({ status: newStatus })
         .eq('id', campaignId);
       
       if (campaignFallbackError) {
@@ -774,7 +772,7 @@ const BrandDashboard = () => {
 
         {/* Key Metrics */}
         <motion.div 
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
@@ -785,34 +783,47 @@ const BrandDashboard = () => {
               value: stats.activeCampaigns, 
               icon: '🚀', 
               subtitle: `${stats.totalOutreach} total outreach sent`,
-              color: 'from-blue-500 to-blue-600'
+              color: 'from-blue-500 to-blue-600',
+              onClick: undefined
             },
             { 
               title: 'Potential Reach', 
               value: stats.totalReach, 
               icon: '👥', 
               subtitle: 'Across all campaigns',
-              color: 'from-purple-500 to-purple-600'
+              color: 'from-purple-500 to-purple-600',
+              onClick: undefined
             },
             { 
               title: 'Response Rate', 
               value: stats.responseRate, 
               icon: '💬', 
               subtitle: `${stats.repliedOutreach} of ${stats.totalOutreach} replied`,
-              color: 'from-green-500 to-green-600'
+              color: 'from-green-500 to-green-600',
+              onClick: undefined
             },
             { 
               title: 'Total Budget', 
               value: stats.totalBudget, 
               icon: '💰', 
               subtitle: 'Allocated across campaigns',
-              color: 'from-orange-500 to-orange-600'
+              color: 'from-orange-500 to-orange-600',
+              onClick: undefined
+            },
+            {
+              title: 'My Contracts',
+              value: contracts.length,
+              icon: '📄',
+              subtitle: 'All your contracts',
+              color: 'from-slate-500 to-slate-700',
+              onClick: () => navigate('/contracts')
             }
           ].map((stat, index) => (
             <motion.div
               key={index}
-              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200 hover:border-slate-300 dark:hover:border-slate-600"
-              whileHover={{ y: -2 }}
+              className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200 hover:border-slate-300 dark:hover:border-slate-600 ${stat.onClick ? 'cursor-pointer' : ''}`}
+              whileHover={stat.onClick ? { y: -2, scale: 1.03 } : { y: -2 }}
+              onClick={stat.onClick}
             >
               <div className="flex items-center justify-between mb-4">
                 <div className={`w-12 h-12 bg-gradient-to-r ${stat.color} rounded-xl flex items-center justify-center text-2xl shadow-lg`}>

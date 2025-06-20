@@ -237,9 +237,8 @@ const InfluencerProfileSetup: React.FC = () => {
       }
       
       sessionStorage.setItem('profileSetupCompleted', 'true');
-      
-      // Navigate to creator dashboard
-      navigate('/creator/dashboard');
+      // Force a full reload to ensure the latest profile data is fetched
+      window.location.reload();
       
     } catch (err: any) {
       setError(err.message || 'Failed to update profile');

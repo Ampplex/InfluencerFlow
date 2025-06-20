@@ -20,6 +20,8 @@ import { ContractPreview } from './ContractPreview';
 import { HoverBorderGradient } from '../../src/components/ui/hover-border-gradient';
 import { Badge } from '../../src/components/ui/badge';
 import { Alert, AlertDescription } from '../../src/components/ui/alert';
+import { useSelector } from 'react-redux';
+import supabase from '../../utils/supabase';
 
 export const ContractList: React.FC = () => {
   const navigate = useNavigate();
@@ -27,6 +29,7 @@ export const ContractList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const userType = useSelector((state: any) => state.userType?.type || 'brand');
 
   useEffect(() => {
     loadContracts();
@@ -36,11 +39,12 @@ export const ContractList: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-
-      // const user = await contractService.getCurrentUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const userId = session.user.id;
       const contractsList = await contractService.listContracts(
-        'TODO_USER_ID',
-        'brand' // or 'influencer', as appropriate
+        userId,
+        userType || 'brand'
       );
       setContracts(contractsList);
     } catch (err: any) {

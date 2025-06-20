@@ -6,6 +6,7 @@ import { contractService } from '../../services/contractService';
 import { HoverBorderGradient } from '../../src/components/ui/hover-border-gradient';
 import { Alert, AlertDescription } from '../../src/components/ui/alert';
 import { X, CheckCircle, AlertCircle, RefreshCw, Loader2, PenSquare, FileSignature, Landmark, Calendar } from 'lucide-react';
+import supabase from '../../utils/supabase';
 
 interface ContractSigningProps {
   contract: Contract;
@@ -39,13 +40,16 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract, onSi
       const signatureBlob = await fetch(signatureDataUrl).then(res => res.blob());
       const signatureFile = new File([signatureBlob], 'signature.png', { type: 'image/png' });
 
-      // Use a placeholder for user object or add a TODO comment
+      // Get current user ID from session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const userId = session.user.id;
 
       // Sign contract
       const signedContract = await contractService.signContract(
         contract.id,
         signatureFile,
-        'TODO_USER_ID' // Replace with actual user ID
+        userId
       );
 
       if (onSign) {

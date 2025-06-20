@@ -193,7 +193,6 @@ const InfluencerProfileSetup: React.FC = () => {
           bio: profile.bio,
           phone_num: profile.phone_num,
           platforms: profile.platforms,
-          updated_at: new Date().toISOString()
         })
         .eq('id', profile.id)
         .select()
@@ -210,8 +209,6 @@ const InfluencerProfileSetup: React.FC = () => {
           bio: profile.bio,
           phone_num: profile.phone_num,
           platforms: profile.platforms,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
         })
         .select()
         .single();

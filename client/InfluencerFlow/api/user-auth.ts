@@ -9,7 +9,7 @@ console.log('SUPABASE_URL (direct):', process.env.SUPABASE_URL ? 'Set ✓' : 'Mi
 console.log('VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL ? 'Set ✓' : 'Missing ❌');
 console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Set ✓' : 'Missing ❌');
 
-// Show first/last 10 characters of keys for verification (don't show full keys)
+// Show first/last 10 characters of keys for veriffication (don't show full keys)
 if (process.env.SUPABASE_URL) {
   console.log('SUPABASE_URL preview:', 
     process.env.SUPABASE_URL.substring(0, 20) + '...' + 

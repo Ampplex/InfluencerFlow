@@ -138,19 +138,30 @@ function AppContent() {
               console.error("Error in influencer fetch:", err);
             }
 
+            console.log('existingInfluencer:', existingInfluencer);
+            console.log('profileSetupCompleted:', profileSetupCompleted);
+
             if (existingInfluencer) {
-              console.log('Influencer exists, checking if profile is complete...');
-              const profileSetupCompleted = sessionStorage.getItem('profileSetupCompleted') === 'true';
-              
-              if (profileSetupCompleted || (existingInfluencer.bio || existingInfluencer.platforms)) {
-                console.log('Influencer profile is already complete or was just completed');
+              let bioValid = existingInfluencer.bio && existingInfluencer.bio.trim().length >= 20;
+              let platformsValid = false;
+              let platformsArr: any[] = [];
+              try {
+                platformsArr = JSON.parse(existingInfluencer.platforms || '[]');
+                if (!Array.isArray(platformsArr)) {
+                  throw new Error('platforms is not an array');
+                }
+                platformsValid = platformsArr.length > 0 && platformsArr.every(p => p.url && p.url.trim() !== '');
+              } catch (e) {
+                console.error('Error parsing platforms for influencer:', e, existingInfluencer.platforms);
+                platformsValid = false;
+              }
+              console.log('bioValid:', bioValid, 'platformsValid:', platformsValid, 'platformsArr:', platformsArr);
+              if (profileSetupCompleted || (bioValid && platformsValid)) {
                 setNeedsProfileSetup(false);
               } else {
-                console.log('Influencer profile incomplete, needs setup');
                 setNeedsProfileSetup(true);
               }
             } else {
-              console.log('New influencer, needs profile setup');
               setNeedsProfileSetup(true);
             }
           } catch (dbError) {
@@ -328,25 +339,24 @@ function AppContent() {
         />
 
         <Route 
-          path="/dashboard" 
+          path="/creator/dashboard"
           element={
             <ProtectedRoute isLoggedIn={isLoggedIn} isLoading={isLoading}>
-              {needsProfileSetup && userTypeRedux === 'influencer' && authFlowCompleted && location.pathname !== '/influencer-profile-setup'
-                ? (() => {
-                    console.log("Redirecting to profile setup, needsProfileSetup:", needsProfileSetup, "userTypeRedux:", userTypeRedux, "authFlowCompleted:", authFlowCompleted);
-                    return <Navigate to="/influencer-profile-setup" replace />;
-                  })()
-                : needsBrandProfileSetup && userTypeRedux === 'brand' && authFlowCompleted && location.pathname !== '/brand-profile-setup'
-                ? (() => {
-                    console.log("Redirecting to brand profile setup, needsBrandProfileSetup:", needsBrandProfileSetup, "userTypeRedux:", userTypeRedux, "authFlowCompleted:", authFlowCompleted);
-                    return <Navigate to="/brand-profile-setup" replace />;
-                  })()
-                : userTypeRedux === 'influencer'
-                ? <InfluencerDashboard />
+              <InfluencerDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route 
+          path="/dashboard"
+          element={
+            <ProtectedRoute isLoggedIn={isLoggedIn} isLoading={isLoading}>
+              {userTypeRedux === 'influencer'
+                ? <Navigate to="/creator/dashboard" replace />
                 : <BrandDashboard />
               }
             </ProtectedRoute>
-          } 
+          }
         />
         
         <Route 

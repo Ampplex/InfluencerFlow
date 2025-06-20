@@ -821,7 +821,6 @@ async function saveOutreachRecords(
       .from('campaign')
       .update({ 
         status: 'active', 
-        updated_at: new Date().toISOString() 
       })
       .eq('id', campaignId)
       .select();
