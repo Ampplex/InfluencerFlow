@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { CreditCard, DollarSign, CheckCircle, XCircle, AlertCircle, TestTube } from 'lucide-react';
 
 // Razorpay types
