@@ -32,16 +32,7 @@ export async function getCurrentUserId(): Promise<string | null> {
 /**
  * Check if influencer profile is complete (bio and platforms must be set)
  */
-export async function isInfluencerProfileComplete(userId: string, authToken: string): Promise<boolean> {
-  const headers = getApiHeaders(authToken);
-  const response = await fetch(
-    `${supabaseUrl()}/rest/v1/influencers?id=eq.${userId}&select=bio,platforms`,
-    { headers }
-  );
-  if (!response.ok) return false;
-  const data = await response.json();
-  return !!(data.length && (data[0].bio || data[0].platforms));
-}
+// Removed the async API-based isInfluencerProfileComplete
 
 /**
  * Check if brand profile is complete (brand_name, brand_description, location must be set)
@@ -131,4 +122,21 @@ export function supabaseUrl(): string {
  */
 export function logOnboardingError(context: string, error: any) {
   console.error(`[Onboarding][${context}]`, error);
+}
+
+// Utility: Check if influencer profile is complete
+export function isInfluencerProfileComplete(profile: any): boolean {
+  if (!profile) return false;
+  const bioValid = typeof profile.bio === 'string' && profile.bio.trim().length >= 10;
+  const usernameValid = typeof profile.influencer_username === 'string' && profile.influencer_username.trim().length >= 3 && !profile.influencer_username.includes(' ');
+  const emailValid = typeof profile.influencer_email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.influencer_email);
+  const phoneValid = typeof profile.phone_num === 'string' && /^\d{7,20}$/.test(profile.phone_num);
+  let platformsValid = false;
+  try {
+    const platformsArr = JSON.parse(profile.platforms || '[]');
+    platformsValid = Array.isArray(platformsArr) && platformsArr.some((p: any) => p.url && p.url.trim() !== '');
+  } catch {
+    platformsValid = false;
+  }
+  return bioValid && usernameValid && emailValid && phoneValid && platformsValid;
 } 

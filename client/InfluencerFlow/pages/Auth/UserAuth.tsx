@@ -258,28 +258,27 @@ export function UserLogin() {
 
       if (result.success) {
         setSuccess('Login successful! Redirecting to your dashboard...');
-        
         if (result.user?.accessToken) {
           localStorage.setItem('supabase.auth.token', JSON.stringify({
             access_token: result.user.accessToken,
             refresh_token: result.user.refreshToken,
             user: result.user
           }));
-          // Set Supabase session for global auth state
           await supabase.auth.setSession({
             access_token: result.user.accessToken,
             refresh_token: result.user.refreshToken,
           });
         }
-        
         setTimeout(() => {
-          // Route to appropriate dashboard based on user type
-          const dashboardUrl = userType === 'brand' 
-            ? '/dashboard'                    // Brand dashboard
-            : '/creator/dashboard';           // Creator dashboard
-          
-          // Since we're on same domain, use relative URLs
-          window.location.href = dashboardUrl;
+          if (userType === 'brand') {
+            if (result.user?.profileExists) {
+              window.location.href = '/dashboard';
+            } else {
+              window.location.href = '/brand-profile-setup';
+            }
+          } else {
+            window.location.href = '/creator/dashboard';
+          }
         }, 1500);
       } else {
         setError(result.error || 'Invalid email or password. Please check your credentials.');

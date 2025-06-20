@@ -18,6 +18,7 @@ import {
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { isInfluencerProfileComplete } from './onboardingUtils';
 
 // Interface for platform links
 export interface PlatformLink {
@@ -122,6 +123,8 @@ const InfluencerProfileSetup: React.FC = () => {
   const navigate = useNavigate();
   
   // State for form fields
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [bio, setBio] = useState('');
   const [phone, setPhone] = useState('');
   const [platforms, setPlatforms] = useState<PlatformLink[]>([
@@ -143,7 +146,6 @@ const InfluencerProfileSetup: React.FC = () => {
       const id = await getCurrentUserId();
       if (id) {
         setUserId(id);
-        
         // Fetch existing profile data if available
         try {
           const { data: profileData, error: profileError } = await supabase
@@ -151,12 +153,17 @@ const InfluencerProfileSetup: React.FC = () => {
             .select('*')
             .eq('id', id)
             .single();
-          
           if (profileData && !profileError) {
+            // If profile is already complete, redirect to dashboard
+            if (isInfluencerProfileComplete(profileData)) {
+              navigate('/creator/dashboard', { replace: true });
+              return;
+            }
             // Pre-populate form with existing data
+            if (profileData.influencer_username) setUsername(profileData.influencer_username);
+            if (profileData.influencer_email) setEmail(profileData.influencer_email);
             if (profileData.bio) setBio(profileData.bio);
             if (profileData.phone_num) setPhone(profileData.phone_num);
-            
             if (profileData.platforms) {
               try {
                 const existingPlatforms = JSON.parse(profileData.platforms);
@@ -197,15 +204,26 @@ const InfluencerProfileSetup: React.FC = () => {
       return;
     }
     
-    // Phone validation: 7-20 digits
+    if (!username || username.trim().length < 3 || username.includes(' ')) {
+      setError('Username must be at least 3 characters and contain no spaces.');
+      return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('A valid email is required.');
+      return;
+    }
     if (!phone || !/^\d{7,20}$/.test(phone)) {
       setPhoneError('Please enter a valid phone number (7-20 digits, numbers only).');
       return;
     }
-
-    // ✅ FIXED: Simplified validation - only require phone and bio
     if (!bio || bio.trim().length < 10) {
       setError('Bio must be at least 10 characters long.');
+      return;
+    }
+    
+    const activePlatforms = platforms.filter(p => p.url.trim() !== '');
+    if (activePlatforms.length === 0) {
+      setError('Please add at least one social media platform.');
       return;
     }
     
@@ -217,11 +235,12 @@ const InfluencerProfileSetup: React.FC = () => {
       if (!authToken) throw new Error('No authentication token available');
       
       // ✅ FIXED: Include all platforms, not just active ones
-      const activePlatforms = platforms.filter(p => p.url.trim() !== '');
       const platformsJson = JSON.stringify(activePlatforms);
       
       const profile = {
         id: userId,
+        username: username.trim(),
+        email: email.trim(),
         bio: bio.trim(),
         phone_num: phone,
         platforms: platformsJson,
@@ -364,6 +383,19 @@ const InfluencerProfileSetup: React.FC = () => {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-mono font-medium text-slate-700 dark:text-slate-300 mb-1">Username</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm"
+                    placeholder="your_unique_username"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    required
+                    minLength={3}
+                  />
+                </div>
+
                 <textarea
                   id="bio"
                   rows={4}
@@ -413,6 +445,18 @@ const InfluencerProfileSetup: React.FC = () => {
                       For important campaign communications
                     </p>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-mono font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
+                  <input
+                    type="email"
+                    className="w-full px-4 py-3 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-mono text-sm"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                  />
                 </div>
 
                 <input

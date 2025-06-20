@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import './index.css';
 import Navbar from '../components/Navbar';
@@ -22,6 +22,7 @@ import { PersistGate } from 'redux-persist/integration/react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { setUserType } from '../redux/userType/userTypeSlice';
+import { isInfluencerProfileComplete } from '../pages/onboardingUtils';
 
 // Types
 type UserType = 'brand' | 'influencer' | null;
@@ -59,6 +60,49 @@ const getCookie = (name: string): string | null => {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
   return match ? match[2] : null;
 };
+
+function InfluencerProfileGuard({ children }: { children: React.ReactNode }) {
+  const [checking, setChecking] = useState(true);
+  const [shouldRedirect, setShouldRedirect] = useState(false);
+  const [profileChecked, setProfileChecked] = useState(false);
+  const navigate = useNavigate();
+  useEffect(() => {
+    const checkProfile = async () => {
+      setChecking(true);
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData.session?.user?.id;
+        if (!userId) {
+          setShouldRedirect(true);
+          setChecking(false);
+          return;
+        }
+        const { data: profileData, error } = await supabase
+          .from('influencers')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        if (!profileData || error || !isInfluencerProfileComplete(profileData)) {
+          setShouldRedirect(true);
+        }
+      } catch (e) {
+        setShouldRedirect(true);
+      } finally {
+        setChecking(false);
+        setProfileChecked(true);
+      }
+    };
+    checkProfile();
+  }, []);
+  useEffect(() => {
+    if (!checking && shouldRedirect && profileChecked) {
+      navigate('/influencer-profile-setup', { replace: true });
+    }
+  }, [checking, shouldRedirect, profileChecked, navigate]);
+  if (checking) return <LoadingScreen />;
+  if (shouldRedirect) return null;
+  return <>{children}</>;
+}
 
 function AppContent() {
   const location = useLocation();
@@ -316,7 +360,9 @@ function AppContent() {
           path="/creator/dashboard"
           element={
             <ProtectedRoute isLoggedIn={isLoggedIn} isLoading={isLoading}>
-              <InfluencerDashboard />
+              <InfluencerProfileGuard>
+                <InfluencerDashboard />
+              </InfluencerProfileGuard>
             </ProtectedRoute>
           }
         />

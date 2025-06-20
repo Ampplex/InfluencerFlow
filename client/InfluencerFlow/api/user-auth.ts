@@ -110,6 +110,7 @@ interface AuthResponse {
     accountActivated?: boolean;
     emailVerificationRequired?: boolean;
     emailVerified?: boolean;
+    profileExists?: boolean;
   };
   error?: string;
 }
@@ -761,6 +762,7 @@ const handleEmailLogin = async (email: string, password: string, userType: 'bran
     let userName = '';
     let brandName = '';
     let username = '';
+    let profileExists = undefined;
 
     if (userType === 'brand') {
       // Get brand info from early_access_requests
@@ -769,9 +771,15 @@ const handleEmailLogin = async (email: string, password: string, userType: 'bran
         .select('name, brand')
         .eq('email', email.toLowerCase())
         .single();
-      
       userName = brandData?.name || '';
       brandName = brandData?.brand || '';
+      // Check if brand profile exists
+      const { data: brandProfile } = await supabase
+        .from('brands')
+        .select('id')
+        .eq('id', data.user.id)
+        .single();
+      profileExists = !!brandProfile;
     } else {
       // Get influencer info
       const { data: influencerData } = await supabase
@@ -779,7 +787,6 @@ const handleEmailLogin = async (email: string, password: string, userType: 'bran
         .select('influencer_username')
         .eq('influencer_email', email.toLowerCase())
         .single();
-      
       username = influencerData?.influencer_username || data.user.user_metadata?.username || '';
     }
 
@@ -797,7 +804,8 @@ const handleEmailLogin = async (email: string, password: string, userType: 'bran
         requiresPasswordSetup: false,
         accessToken: data.session?.access_token,
         refreshToken: data.session?.refresh_token,
-        accountActivated: true
+        accountActivated: true,
+        ...(userType === 'brand' ? { profileExists } : {})
       }
     };
   } catch (error) {
