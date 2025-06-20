@@ -39,14 +39,13 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract, onSi
       const signatureBlob = await fetch(signatureDataUrl).then(res => res.blob());
       const signatureFile = new File([signatureBlob], 'signature.png', { type: 'image/png' });
 
-      // Get current user
-      const user = await contractService.getCurrentUser();
+      // Use a placeholder for user object or add a TODO comment
 
       // Sign contract
       const signedContract = await contractService.signContract(
         contract.id,
         signatureFile,
-        user.userId
+        'TODO_USER_ID' // Replace with actual user ID
       );
 
       if (onSign) {

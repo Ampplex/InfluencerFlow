@@ -37,10 +37,10 @@ export const ContractList: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const user = await contractService.getCurrentUser();
+      // const user = await contractService.getCurrentUser();
       const contractsList = await contractService.listContracts(
-        user.userId,
-        user.role as "brand" | "influencer"
+        'TODO_USER_ID',
+        'brand' // or 'influencer', as appropriate
       );
       setContracts(contractsList);
     } catch (err: any) {

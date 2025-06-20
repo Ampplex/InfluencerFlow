@@ -100,12 +100,12 @@ export const ContractCreationForm: React.FC<ContractCreationFormProps> = ({ onPr
       if (onSubmit) {
         onSubmit(formData);
       } else {
-        const user = await contractService.getCurrentUser();
+        // const user = await contractService.getCurrentUser();
         const contractData = {
           ...formData,
-          brand_name: user.brandName || formData.brand_name,
+          brand_name: formData.brand_name,
           influencer_id: selectedInfluencerId, // Use the selected influencer ID
-          brand_id: user.userId
+          brand_id: 'TODO' // Use a placeholder for user object or add a TODO comment
         };
         
         await contractService.generateContract(contractData);
