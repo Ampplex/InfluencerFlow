@@ -194,31 +194,31 @@ const api = {
 };
 
 // Razorpay Integration Hook
-const useRazorpay = () => {
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.body.appendChild(script);
+// const useRazorpay = () => {
+//   useEffect(() => {
+//     const script = document.createElement('script');
+//     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+//     script.async = true;
+//     document.body.appendChild(script);
     
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
+//     return () => {
+//       if (document.body.contains(script)) {
+//         document.body.removeChild(script);
+//       }
+//     };
+//   }, []);
 
-  const initiatePayment = (options: RazorpayOptions) => {
-    if (!window.Razorpay) {
-      throw new Error('Razorpay SDK not loaded');
-    }
+//   const initiatePayment = (options: RazorpayOptions) => {
+//     if (!window.Razorpay) {
+//       throw new Error('Razorpay SDK not loaded');
+//     }
     
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-  };
+//     const rzp = new window.Razorpay(options);
+//     rzp.open();
+//   };
 
-  return { initiatePayment };
-};
+//   return { initiatePayment };
+// };
 
 // Error Display Component
 const ErrorMessage = ({ error, onRetry }: { error: string; onRetry: () => void }) => (
@@ -302,7 +302,6 @@ const ContractManager = () => {
   
   const [userRole] = useState<'influencer' | 'brand'>('brand');
   const [userId] = useState('user-123');
-  const { initiatePayment } = useRazorpay();
 
   // Determine active tab based on URL
   useEffect(() => {

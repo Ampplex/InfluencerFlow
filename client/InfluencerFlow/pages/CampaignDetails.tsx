@@ -317,7 +317,7 @@ export default function CampaignDetails() {
                             outerRadius={70}
                             label
                           >
-                            {platformData.map((entry, idx) => (
+                            {platformData.map((_, idx) => (
                               <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
                             ))}
                           </Pie>
