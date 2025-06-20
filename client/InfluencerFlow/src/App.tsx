@@ -68,9 +68,6 @@ function AppContent() {
   // State
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
-  const [needsBrandProfileSetup, setNeedsBrandProfileSetup] = useState(false);
-  const [authFlowCompleted, setAuthFlowCompleted] = useState(false);
 
   console.log('AppContent render - Current location:', window.location.href);
   console.log('User type from Redux (App.tsx - AppContent):', userTypeRedux);
@@ -78,21 +75,6 @@ function AppContent() {
   useEffect(() => {
     const performInitialAuthCheck = async () => {
       console.log('performInitialAuthCheck: Starting initial auth check...');
-      
-      // Check if profile setup was just completed
-      const profileSetupCompleted = sessionStorage.getItem('profileSetupCompleted') === 'true';
-      if (profileSetupCompleted) {
-        console.log('Profile setup was completed, overriding needsProfileSetup flag');
-        setNeedsProfileSetup(false);
-        sessionStorage.removeItem('profileSetupCompleted');
-      }
-      
-      // Check if brand profile setup was just completed
-      const brandProfileSetupCompleted = sessionStorage.getItem('brandProfileSetupCompleted') === 'true';
-      if (brandProfileSetupCompleted) {
-        setNeedsBrandProfileSetup(false);
-        sessionStorage.removeItem('brandProfileSetupCompleted');
-      }
       
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -139,7 +121,6 @@ function AppContent() {
             }
 
             console.log('existingInfluencer:', existingInfluencer);
-            console.log('profileSetupCompleted:', profileSetupCompleted);
 
             if (existingInfluencer) {
               let bioValid = existingInfluencer.bio && existingInfluencer.bio.trim().length >= 20;
@@ -156,13 +137,13 @@ function AppContent() {
                 platformsValid = false;
               }
               console.log('bioValid:', bioValid, 'platformsValid:', platformsValid, 'platformsArr:', platformsArr);
-              if (profileSetupCompleted || (bioValid && platformsValid)) {
-                setNeedsProfileSetup(false);
+              if (bioValid && platformsValid) {
+                setIsLoading(false);
               } else {
-                setNeedsProfileSetup(true);
+                setIsLoading(true);
               }
             } else {
-              setNeedsProfileSetup(true);
+              setIsLoading(true);
             }
           } catch (dbError) {
             console.error('Database operation error:', dbError);
@@ -195,12 +176,11 @@ function AppContent() {
           }
           
           if (
-            brandProfileSetupCompleted ||
             (brandProfile && brandProfile.brand_name && brandProfile.brand_description && brandProfile.location)
           ) {
-            setNeedsBrandProfileSetup(false);
+            setIsLoading(false);
           } else {
-            setNeedsBrandProfileSetup(true);
+            setIsLoading(true);
           }
         }
       } catch (error) {
@@ -219,12 +199,6 @@ function AppContent() {
       console.log('onAuthStateChange: Auth state changed.', event, session);
       setIsLoggedIn(!!session);
       
-      // Mark auth flow as completed on SIGNED_IN event
-      if (event === 'SIGNED_IN') {
-        setAuthFlowCompleted(true);
-        console.log('onAuthStateChange: Auth flow marked as completed');
-      }
-
       if (session) {
         console.log('onAuthStateChange: Session found, dispatching user type.');
         

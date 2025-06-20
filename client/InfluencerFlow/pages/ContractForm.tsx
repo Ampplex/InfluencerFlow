@@ -47,33 +47,33 @@ enum PaymentStatus {
   FAILED = 'FAILED'
 }
 
-// Razorpay types
-interface RazorpayOptions {
-  key: string;
-  amount: number;
-  currency: string;
-  name: string;
-  description: string;
-  order_id: string;
-  handler: (response: RazorpayResponse) => void;
-  prefill: {
-    name: string;
-    email: string;
-    contact: string;
-  };
-  theme: {
-    color: string;
-  };
-  modal: {
-    ondismiss: () => void;
-  };
-}
+// // Razorpay types
+// interface RazorpayOptions {
+//   key: string;
+//   amount: number;
+//   currency: string;
+//   name: string;
+//   description: string;
+//   order_id: string;
+//   handler: (response: RazorpayResponse) => void;
+//   prefill: {
+//     name: string;
+//     email: string;
+//     contact: string;
+//   };
+//   theme: {
+//     color: string;
+//   };
+//   modal: {
+//     ondismiss: () => void;
+//   };
+// }
 
-interface RazorpayResponse {
-  razorpay_payment_id: string;
-  razorpay_order_id: string;
-  razorpay_signature: string;
-}
+// interface RazorpayResponse {
+//   razorpay_payment_id: string;
+//   razorpay_order_id: string;
+//   razorpay_signature: string;
+// }
 
 declare global {
   interface Window {
@@ -155,20 +155,20 @@ const api = {
     return response.json();
   },
 
-  verifyPayment: async (paymentData: RazorpayResponse & { contract_id: string }): Promise<Contract> => {
-    const response = await fetch(`${API_BASE_URL}/api/payments/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(paymentData)
-    });
+  // verifyPayment: async (paymentData: RazorpayResponse & { contract_id: string }): Promise<Contract> => {
+  //   const response = await fetch(`${API_BASE_URL}/api/payments/verify`, {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify(paymentData)
+  //   });
     
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Payment verification failed' }));
-      throw new Error(error.error || 'Payment verification failed');
-    }
+  //   if (!response.ok) {
+  //     const error = await response.json().catch(() => ({ error: 'Payment verification failed' }));
+  //     throw new Error(error.error || 'Payment verification failed');
+  //   }
     
-    return response.json();
-  },
+  //   return response.json();
+  // },
   
   getContract: async (id: string): Promise<Contract> => {
     const response = await fetch(`${API_BASE_URL}/api/contracts/${id}`);
