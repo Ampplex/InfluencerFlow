@@ -47,7 +47,6 @@ const NegotiationChat: React.FC = () => {
   const [showStartForm, setShowStartForm] = useState(true);
   const [activeSessions, setActiveSessions] = useState<SessionInfo[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
   const [influencer_id, setInfluencerID] = useState(null);

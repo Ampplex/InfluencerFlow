@@ -348,11 +348,6 @@ const ContractManager = () => {
     }
   };
 
-  const handleContractCreated = () => {
-    setActiveTab('list');
-    loadContracts();
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}

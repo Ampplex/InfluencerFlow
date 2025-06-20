@@ -1,23 +1,17 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowRight, 
-  Mail, 
   Menu, 
   X, 
   Play, 
-  Users, 
-  Zap, 
-  Shield, 
-  Globe, 
   MessageSquare, 
   CreditCard, 
   FileText, 
   Search, 
   Star,
-  CheckCircle,
   TrendingUp,
   Bot,
   Languages,
@@ -188,7 +182,6 @@ const SparklesCore = (props: ParticlesProps) => {
 // Main Landing Page Component
 const InfluencerFlowLanding = () => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeFeature, setActiveFeature] = useState(0);
 
   const menuItems = [
     { name: "Features", href: "#features" },

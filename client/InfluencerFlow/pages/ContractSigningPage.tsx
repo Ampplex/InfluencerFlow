@@ -30,7 +30,7 @@ const ContractSigningPage: React.FC = () => {
     }
   };
 
-  const handleSign = async (signedContract: Contract) => {
+  const handleSign = async () => {
     // Navigate back to contracts list after successful signing
     navigate('/contracts');
   };
