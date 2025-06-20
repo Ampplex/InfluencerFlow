@@ -61,7 +61,6 @@ const ResetPassword = () => {
             throw error;
           }
           
-          // Use the session data for debugging and verification
           if (data?.session) {
             console.log('✅ Session set successfully (method 1)', {
               userId: data.session.user?.id,
@@ -95,7 +94,6 @@ const ResetPassword = () => {
             throw emailError;
           }
           
-          // Use the email verification data
           if (emailData?.session) {
             console.log('✅ Email token verified successfully (method 3)', {
               userId: emailData.session.user?.id,
@@ -107,7 +105,6 @@ const ResetPassword = () => {
           return;
         }
         
-        // Use the recovery token data
         if (data?.session) {
           console.log('✅ Recovery token verified successfully (method 2)', {
             userId: data.session.user?.id,
@@ -167,7 +164,6 @@ const ResetPassword = () => {
         throw error;
       }
 
-      // Use the updated user data for verification and logging
       if (data?.user) {
         console.log('✅ Password updated successfully', {
           userId: data.user.id,
@@ -179,16 +175,11 @@ const ResetPassword = () => {
         console.log('✅ Password updated successfully (no user data returned)');
       }
       
-      setSuccess(true);
+      // ✅ FIXED: Sign out user after password reset to prevent auto-login
+      console.log('🚪 Signing out user after password reset...');
+      await supabase.auth.signOut();
       
-      // Redirect to dashboard after 3 seconds
-      setTimeout(() => {
-        if (userType === 'brand') {
-          navigate('/dashboard');
-        } else {
-          navigate('/creator/dashboard');
-        }
-      }, 3000);
+      setSuccess(true);
 
     } catch (error: any) {
       console.error('💥 Password update error:', error);
@@ -205,14 +196,27 @@ const ResetPassword = () => {
     }
   };
 
+  // ✅ FIXED: Success screen now prompts to login instead of auto-redirecting
   if (success) {
     return (
       <div className="reset-success">
         <div className="success-container">
           <div className="checkmark">✅</div>
           <h2>Password Updated Successfully!</h2>
-          <p>Your password has been updated. You will be redirected to your dashboard shortly.</p>
-          <p>If you are not redirected automatically, <button onClick={() => navigate(userType === 'brand' ? '/dashboard' : '/creator/dashboard')} className="link-button">click here</button>.</p>
+          <p>Your password has been updated. You can now login with your new password.</p>
+          
+          <div className="action-buttons">
+            <button 
+              onClick={() => navigate('/auth')} 
+              className="login-button"
+            >
+              Go to Login
+            </button>
+          </div>
+          
+          <p className="help-text">
+            Please use your email and new password to sign in.
+          </p>
         </div>
       </div>
     );
@@ -289,7 +293,7 @@ const ResetPassword = () => {
               <button onClick={() => navigate('/auth')} className="link-button">
                 Back to Login
               </button>
-              <button onClick={() => navigate('/auth?forgot=true')} className="link-button">
+              <button onClick={() => navigate('/auth')} className="link-button">
                 Request New Reset Link
               </button>
             </div>
@@ -492,6 +496,32 @@ const ResetPassword = () => {
           color: #374151;
           margin-bottom: 1rem;
           line-height: 1.6;
+        }
+
+        .action-buttons {
+          margin: 2rem 0;
+        }
+
+        .login-button {
+          background: #3b82f6;
+          color: white;
+          border: none;
+          padding: 0.875rem 2rem;
+          border-radius: 8px;
+          font-weight: 500;
+          font-size: 1rem;
+          cursor: pointer;
+          transition: background-color 0.2s;
+        }
+
+        .login-button:hover {
+          background: #2563eb;
+        }
+
+        .help-text {
+          font-size: 0.85rem;
+          color: #6b7280;
+          margin-top: 1rem;
         }
       `}</style>
     </div>

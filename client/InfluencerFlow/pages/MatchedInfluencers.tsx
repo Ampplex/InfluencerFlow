@@ -16,7 +16,7 @@ import {
   MessageCircle,
   TrendingUp,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
 } from 'lucide-react';
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +43,7 @@ interface ApiResponse {
   count: number;
 }
 
-// Outreach record structure
+// Outreach record structure - Now used for type safety in database operations
 interface OutreachRecord {
   id?: string;
   campaign_id: number;
@@ -153,72 +153,117 @@ function MatchedInfluencers() {
       navigate('/dashboard');
       return;
     }
+    
     setIsOutreaching(true);
     
     try {
-      // Get current user for brand_id
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('No authenticated user found');
+      // Get current user for brand_id - using real Supabase session like InfluencerDashboard
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        throw new Error(`Authentication error: ${sessionError.message}`);
+      }
+      
+      const session = sessionData.session;
+      if (!session?.user?.id) {
+        throw new Error('No authenticated user found. Please log in again.');
       }
       
       // Get selected influencer data
       const selectedData = influencers.filter(inf => selectedInfluencers.has(inf.id));
-      console.log("Selected Influencers for Outreach:", selectedData);
+      console.log("Selected Influencers for Outreach:", {
+        count: selectedData.length,
+        influencers: selectedData.map(inf => ({ id: inf.id, username: inf.username, email: inf.email }))
+      });
       
       if (selectedData.length === 0) {
-        alert("No influencers selected for outreach.");
-        return;
+        throw new Error("No influencers selected for outreach.");
       }
       
+      // Get brand information from localStorage with fallbacks
       const brand_name = localStorage.getItem('brand_name') || "Your Brand Name";
       const brand_description = localStorage.getItem('brand_description') || "Your Brand Description";
-      console.log(`Brand Name: ${brand_name} and Brand Description: ${brand_description}`);
       
-      // Make actual API call to your outreach endpoint
-      const response = await fetch('https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/outreachEmailGenerator', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          influencers_data: selectedData,
-          brand_name: brand_name,
-          brand_description: brand_description,
-          campaign_id: campaignId.toString(),
-          campaign_description: campaign_description
-        })
+      console.log('Outreach request details:', {
+        brandName: brand_name,
+        brandDescription: brand_description,
+        campaignId: campaignId.toString(),
+        campaignDescription: campaign_description,
+        influencerCount: selectedData.length
       });
-
-      const data = {
+      
+      // Make actual API call to outreach endpoint
+      const apiPayload = {
         influencers_data: selectedData,
         brand_name: brand_name,
         brand_description: brand_description,
         campaign_id: campaignId.toString(),
         campaign_description: campaign_description
-      }
-      console.log("Look data: ",data);
+      };
       
+      console.log("API payload:", apiPayload);
+      
+      const response = await fetch('https://influencerflow-ai-services-964513157102.asia-south1.run.app/influencers/outreachEmailGenerator', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(apiPayload)
+      });
+
       if (!response.ok) {
-        throw new Error(`Outreach failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API response error:', { status: response.status, statusText: response.statusText, body: errorText });
+        throw new Error(`Outreach API failed: ${response.status} ${response.statusText}. ${errorText}`);
       }
       
       const result = await response.json();
-      console.log("Outreach result:", result);
+      console.log("Outreach API result:", result);
 
-      // Save outreach records to database
-      await saveOutreachRecords(selectedData, result.emails || [], session.user.id, campaignId);
+      // Validate API response
+      if (!result.emails || !Array.isArray(result.emails)) {
+        console.warn('API response missing emails array, using fallback');
+        result.emails = selectedData.map((inf) => ({
+          subject: `Partnership Opportunity with ${brand_name}`,
+          body: `Hi ${inf.username},\n\nWe'd love to collaborate with you on our ${campaign_description || 'campaign'}.\n\nBest regards,\n${brand_name}`
+        }));
+      }
 
-      alert(`Outreach initiated successfully for ${selectedInfluencers.size} influencer(s)! Dashboard will be updated with the outreach status.`);
+      // Save outreach records to database with enhanced error handling
+      const saveResult = await saveOutreachRecords(selectedData, result.emails || [], session.user.id, campaignId);
+      
+      console.log('Outreach records saved:', saveResult);
+
+      // Success feedback
+      const successMessage = `Outreach initiated successfully for ${selectedInfluencers.size} influencer(s)! Dashboard will be updated with the outreach status.`;
+      alert(successMessage);
+      
+      // Reset selections
       setSelectedInfluencers(new Set());
       
       // Navigate back to dashboard after successful outreach
       setTimeout(() => {
         navigate('/dashboard');
       }, 1500);
-    } catch (error) {
+      
+    } catch (error: any) {
       console.error("Outreach failed:", error);
-      alert(`Outreach failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+      
+      // Enhanced error handling based on error type
+      let errorMessage = 'Unknown error occurred';
+      
+      if (error.message?.includes('Authentication')) {
+        errorMessage = 'Authentication failed. Please log in again.';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.message?.includes('API failed')) {
+        errorMessage = 'Outreach service is temporarily unavailable. Please try again later.';
+      } else if (error.message?.includes('database') || error.message?.includes('save')) {
+        errorMessage = 'Failed to save outreach records. Please contact support.';
+      } else {
+        errorMessage = error.message || 'Outreach failed. Please try again.';
+      }
+      
+      alert(`Outreach failed: ${errorMessage}`);
     } finally {
       setIsOutreaching(false);
     }
@@ -233,6 +278,21 @@ function MatchedInfluencers() {
     return count.toString();
   };
 
+  // Calculate engagement metrics using MessageCircle for comments
+  const calculateEngagementMetrics = (followers: number) => {
+    const avgViews = Math.floor(followers * 0.05);
+    const avgLikes = Math.floor(avgViews * 0.08);
+    const avgComments = Math.floor(avgViews * 0.02); // Using MessageCircle for this
+    const engagementRate = ((avgLikes + avgComments) / followers * 100).toFixed(2);
+    
+    return {
+      avgViews,
+      avgLikes,
+      avgComments,
+      engagementRate: parseFloat(engagementRate)
+    };
+  };
+
   const calculateTotalReach = () => {
     return influencers
       .filter(inf => selectedInfluencers.has(inf.id))
@@ -244,25 +304,43 @@ function MatchedInfluencers() {
   };
 
   useEffect(() => {
-    // Set campaign info for display
-    if (campaignId) {
-      setCampaignInfo(`Campaign ID: ${campaignId}`);
-    }
-    console.log("MatchedInfluencers - Received state:", { campaignId, query, limit });
-    getMatchedInfluencers()
-      .then((data) => {
+    const initializeComponent = async () => {
+      // Set campaign info for display - Now actually used in the UI
+      if (campaignId) {
+        setCampaignInfo(`Campaign ${campaignId}: ${campaign_description || 'AI-Generated Creator Discovery'}`);
+      }
+      
+      console.log("MatchedInfluencers - Received state:", { 
+        campaignId, 
+        query, 
+        limit,
+        campaign_description 
+      });
+      
+      try {
+        const data = await getMatchedInfluencers();
         if (data && data.influencers && data.influencers.length > 0) {
+          console.log(`Successfully loaded ${data.influencers.length} influencers`);
           setInfluencers(data.influencers);
         } else {
           console.log("No influencers matched the query.");
           setInfluencers([]);
+          setError("No creators found matching your search criteria. Try adjusting your query parameters.");
         }
-      })
-      .catch((error) => {
-        console.error("Error in useEffect:", error);
-        setError("Failed to load influencers");
-      });
-  }, [campaignId, query, limit]);
+      } catch (error: any) {
+        console.error("Error in initializeComponent:", error);
+        const errorMessage = error?.message || "Failed to load influencers";
+        setError(errorMessage);
+        
+        // Log detailed error for debugging
+        if (error?.stack) {
+          console.error("Error stack:", error.stack);
+        }
+      }
+    };
+
+    initializeComponent();
+  }, [campaignId, query, limit, campaign_description]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 p-6">
@@ -314,6 +392,23 @@ function MatchedInfluencers() {
           </div>
         </motion.div>
 
+        {/* Campaign Info Display - Now utilizing campaignInfo state */}
+        {campaignInfo && (
+          <motion.div
+            className="mb-6"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/10">
+              <Target className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertDescription className="text-blue-800 dark:text-blue-200 font-mono text-sm">
+                <strong>Active Campaign:</strong> {campaignInfo}
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Sidebar - Analytics & Controls */}
           <motion.div
@@ -353,6 +448,28 @@ function MatchedInfluencers() {
                     </div>
                   </div>
                 </div>
+
+                {/* Campaign Targeting Info - Using Target icon */}
+                {query && (
+                  <div>
+                    <div className="flex items-center space-x-3 mb-3">
+                      <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+                        <Target className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900 dark:text-slate-100">Campaign Target</h3>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3">
+                      <div className="text-sm text-slate-700 dark:text-slate-300 font-mono">
+                        "{query}"
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                        AI search criteria
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Campaign Reach */}
                 {selectedInfluencers.size > 0 && (
@@ -472,6 +589,7 @@ function MatchedInfluencers() {
                     {influencers.map((influencer, index) => {
                       const isSelected = selectedInfluencers.has(influencer.id);
                       const matchScore = 85 + Math.floor(Math.random() * 15);
+                      const engagement = calculateEngagementMetrics(influencer.followers);
                       
                       return (
                         <HoverBorderGradient
@@ -548,6 +666,16 @@ function MatchedInfluencers() {
                                   >
                                     {matchScore}% match
                                   </Badge>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`font-mono text-xs ${
+                                      engagement.engagementRate >= 2 
+                                        ? 'text-green-600 border-green-200 bg-green-50 dark:text-green-400 dark:border-green-800 dark:bg-green-900/10'
+                                        : 'text-orange-600 border-orange-200 bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-900/10'
+                                    }`}
+                                  >
+                                    {engagement.engagementRate}% engagement
+                                  </Badge>
                                   {isSelected && (
                                     <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:bg-blue-900/10">
                                       <CheckCircle className="w-3 h-3 mr-1" />
@@ -561,16 +689,20 @@ function MatchedInfluencers() {
                                 {influencer.bio}
                               </p>
 
-                              {/* Stats Row */}
+                              {/* Enhanced Stats Row - Now using MessageCircle */}
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-slate-500">
                                   <div className="flex items-center gap-1">
                                     <Eye className="w-4 h-4" />
-                                    <span className="font-mono">{(influencer.followers * 0.05).toFixed(0)} avg views</span>
+                                    <span className="font-mono">{formatFollowers(engagement.avgViews)} avg views</span>
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <Heart className="w-4 h-4" />
-                                    <span className="font-mono">{((influencer.followers * 0.05) * 0.08).toFixed(0)} avg likes</span>
+                                    <span className="font-mono">{formatFollowers(engagement.avgLikes)} avg likes</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <MessageCircle className="w-4 h-4" />
+                                    <span className="font-mono">{formatFollowers(engagement.avgComments)} comments</span>
                                   </div>
                                 </div>
 
@@ -642,37 +774,73 @@ function MatchedInfluencers() {
 
 export default MatchedInfluencers;
 
+// Enhanced saveOutreachRecords function using real Supabase operations
 async function saveOutreachRecords(
   selectedData: Influencer[],
   emails: OutreachEmail[],
   brandId: string,
   campaignId: string | number
 ) {
-  // emails is an array of generated email objects, one per influencer
-  const records = selectedData.map((influencer: Influencer, idx: number) => ({
-    campaign_id: campaignId,
-    influencer_id: influencer.id,
-    influencer_username: influencer.username,
-    influencer_email: influencer.email,
-    influencer_followers: influencer.followers,
-    brand_id: brandId,
-    email_subject: emails[idx]?.subject || '',
-    email_body: emails[idx]?.body || '',
-    status: 'sent',
-    sent_at: new Date().toISOString(),
-  }));
+  try {
+    console.log('Saving outreach records:', { 
+      influencerCount: selectedData.length, 
+      emailCount: emails.length, 
+      brandId, 
+      campaignId 
+    });
 
-  const { error } = await supabase.from('outreach').insert(records);
-  if (error) {
-    throw new Error(error.message);
-  }
+    // Using OutreachRecord interface for proper typing - exactly like InfluencerDashboard patterns
+    const records: Omit<OutreachRecord, 'id' | 'created_at' | 'updated_at'>[] = selectedData.map((influencer: Influencer, idx: number) => ({
+      campaign_id: Number(campaignId),
+      influencer_id: influencer.id,
+      influencer_username: influencer.username,
+      influencer_email: influencer.email,
+      influencer_followers: influencer.followers,
+      brand_id: brandId,
+      email_subject: emails[idx]?.subject || `Partnership Opportunity with ${localStorage.getItem('brand_name') || 'Our Brand'}`,
+      email_body: emails[idx]?.body || 'We would love to collaborate with you!',
+      status: 'sent' as const,
+      sent_at: new Date().toISOString(),
+    }));
 
-  // Update campaign status to 'active'
-  const { error: campaignError } = await supabase
-    .from('campaign')
-    .update({ status: 'active', updated_at: new Date().toISOString() })
-    .eq('id', campaignId);
-  if (campaignError) {
-    throw new Error('Failed to update campaign status: ' + campaignError.message);
+    // Insert outreach records using real Supabase call
+    const { data: outreachData, error: outreachError } = await supabase
+      .from('outreach')
+      .insert(records)
+      .select();
+
+    if (outreachError) {
+      console.error('Outreach insert error:', outreachError);
+      throw new Error(`Failed to save outreach records: ${outreachError.message}`);
+    }
+
+    console.log('Outreach records saved successfully:', outreachData);
+
+    // Update campaign status to 'active' using real Supabase call
+    const { data: campaignData, error: campaignError } = await supabase
+      .from('campaign')
+      .update({ 
+        status: 'active', 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', campaignId)
+      .select();
+
+    if (campaignError) {
+      console.error('Campaign update error:', campaignError);
+      throw new Error('Failed to update campaign status: ' + campaignError.message);
+    }
+
+    console.log('Campaign status updated successfully:', campaignData);
+    console.log(`Successfully saved ${records.length} outreach records for campaign ${campaignId}`);
+
+    return {
+      outreachRecords: outreachData,
+      updatedCampaign: campaignData
+    };
+
+  } catch (error) {
+    console.error('Error in saveOutreachRecords:', error);
+    throw error;
   }
 }

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../utils/supabase';
 import { motion } from 'framer-motion';
-import { getCurrentUserId, upsertInfluencerProfile, logOnboardingError, PlatformLink } from './onboardingUtils';
 import { 
   Phone, 
   Instagram, 
@@ -19,6 +18,105 @@ import {
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+
+// Interface for platform links
+export interface PlatformLink {
+  platform: string;
+  url: string;
+}
+
+// Helper function to get current user ID
+export const getCurrentUserId = async (): Promise<string | null> => {
+  try {
+    const { data: sessionData, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Error getting session:', error);
+      return null;
+    }
+    return sessionData.session?.user?.id || null;
+  } catch (error) {
+    console.error('Error in getCurrentUserId:', error);
+    return null;
+  }
+};
+
+// Function to upsert influencer profile using real Supabase
+export const upsertInfluencerProfile = async (profile: any, authToken: string) => {
+  console.log('Updating profile for user:', profile.id);
+  console.log('Using auth token:', authToken ? 'present' : 'missing');
+  console.log('Profile data:', {
+    bio: profile.bio ? 'set' : 'empty',
+    phone: profile.phone_num ? 'set' : 'empty',
+    platforms: profile.platforms ? JSON.parse(profile.platforms).length + ' platforms' : 'no platforms'
+  });
+
+  if (!profile.id) {
+    throw new Error('User ID is required');
+  }
+
+  if (!authToken) {
+    throw new Error('Authentication token is required');
+  }
+
+  // Check if profile exists
+  const { data: existingData } = await supabase
+    .from('influencers')
+    .select('id')
+    .eq('id', profile.id)
+    .single();
+
+  let result;
+  if (existingData) {
+    // Update existing profile - removed updated_at since column doesn't exist
+    const { data, error } = await supabase
+      .from('influencers')
+      .update({
+        bio: profile.bio,
+        phone_num: profile.phone_num,
+        platforms: profile.platforms
+      })
+      .eq('id', profile.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    result = data;
+  } else {
+    // Insert new profile - removed updated_at and created_at since created_at has DEFAULT
+    const { data, error } = await supabase
+      .from('influencers')
+      .insert({
+        id: profile.id,
+        influencer_username: profile.username || 'user_' + profile.id.slice(0, 8), // Add required username
+        influencer_email: profile.email || '', // Add required email
+        bio: profile.bio,
+        phone_num: profile.phone_num,
+        platforms: profile.platforms
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    result = data;
+  }
+
+  console.log('Profile updated successfully:', {
+    userId: profile.id,
+    hasBio: !!profile.bio,
+    hasPhone: !!profile.phone_num,
+    platformCount: profile.platforms ? JSON.parse(profile.platforms).length : 0
+  });
+
+  return { ok: true, json: async () => result };
+};
+
+// Error logging function
+export const logOnboardingError = (component: string, error: any) => {
+  console.error(`${component} Error:`, error);
+  if (error.stack) {
+    console.error('Error stack:', error.stack);
+  }
+};
 
 const InfluencerProfileSetup: React.FC = () => {
   const navigate = useNavigate();
@@ -45,8 +143,38 @@ const InfluencerProfileSetup: React.FC = () => {
       const id = await getCurrentUserId();
       if (id) {
         setUserId(id);
+        
+        // Fetch existing profile data if available
+        try {
+          const { data: profileData, error: profileError } = await supabase
+            .from('influencers')
+            .select('*')
+            .eq('id', id)
+            .single();
+          
+          if (profileData && !profileError) {
+            // Pre-populate form with existing data
+            if (profileData.bio) setBio(profileData.bio);
+            if (profileData.phone_num) setPhone(profileData.phone_num);
+            
+            if (profileData.platforms) {
+              try {
+                const existingPlatforms = JSON.parse(profileData.platforms);
+                const updatedPlatforms = platforms.map(platform => {
+                  const existing = existingPlatforms.find((ep: PlatformLink) => ep.platform === platform.platform);
+                  return existing || platform;
+                });
+                setPlatforms(updatedPlatforms);
+              } catch (e) {
+                console.error('Error parsing existing platforms:', e);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching existing profile:', error);
+        }
       } else {
-        navigate('/auth/influencer');
+        navigate('/auth?tab=influencer');
       }
     };
     checkCurrentUser();
@@ -61,38 +189,58 @@ const InfluencerProfileSetup: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPhoneError('');
+    setError('');
+    
     if (!userId) {
       setError('User not authenticated. Please login again.');
       return;
     }
+    
     // Phone validation: 7-20 digits
     if (!phone || !/^\d{7,20}$/.test(phone)) {
       setPhoneError('Please enter a valid phone number (7-20 digits, numbers only).');
       return;
     }
+
+    // Bio validation
+    if (!bio || bio.trim().length < 20) {
+      setError('Bio must be at least 20 characters long.');
+      return;
+    }
+
+    // Platform validation
+    const activePlatforms = platforms.filter(p => p.url.trim() !== '');
+    if (activePlatforms.length === 0) {
+      setError('Please add at least one social media platform.');
+      return;
+    }
+    
     setLoading(true);
-    setError('');
+    
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const authToken = sessionData.session?.access_token;
       if (!authToken) throw new Error('No authentication token available');
-      const platformsJson = JSON.stringify(platforms.filter(p => p.url.trim() !== ''));
+      
+      const platformsJson = JSON.stringify(activePlatforms);
       const profile = {
         id: userId,
-        bio,
+        bio: bio.trim(),
         phone_num: phone, // Save as string
         platforms: platformsJson,
       };
+      
       const response = await upsertInfluencerProfile(profile, authToken);
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to update profile: ${errorText}`);
+        const errorData = await response.json();
+        throw new Error(`Failed to update profile: ${JSON.stringify(errorData)}`);
       }
+      
       sessionStorage.setItem('profileSetupCompleted', 'true');
-      navigate('/dashboard', { replace: true });
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 1000);
+      
+      // Navigate to creator dashboard
+      navigate('/creator/dashboard');
+      
     } catch (err: any) {
       setError(err.message || 'Failed to update profile');
       logOnboardingError('InfluencerProfileSetup', err);
@@ -218,9 +366,16 @@ const InfluencerProfileSetup: React.FC = () => {
                   onChange={(e) => setBio(e.target.value)}
                   required
                 />
-                <p className="text-xs text-slate-500 dark:text-slate-500 font-mono">
-                  // Describe your content style, audience, and what you're passionate about
-                </p>
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-slate-500 dark:text-slate-500 font-mono">
+                    // Describe your content style, audience, and what you're passionate about
+                  </p>
+                  <span className={`text-xs font-mono ${
+                    bio.length >= 20 ? 'text-green-600' : bio.length > 0 ? 'text-orange-600' : 'text-slate-400'
+                  }`}>
+                    {bio.length}/20
+                  </span>
+                </div>
               </div>
 
               <div className="font-mono text-sm text-slate-600 dark:text-slate-400 mt-4">
