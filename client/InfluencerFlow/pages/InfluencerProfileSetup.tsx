@@ -283,6 +283,7 @@ const InfluencerProfileSetup: React.FC = () => {
         transition={{ duration: 0.5 }}
       >
         {/* Header */}
+        
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-8">
             <div className="w-8 h-8 mr-3">
