@@ -5,7 +5,6 @@ import supabase from '../utils/supabase';
 import { contractService } from '../services/contractService';
 import { ContractTemplate } from '../types/contract';
 import { contractIntegrationService } from '../services/contractIntegrationService';
-import axios from 'axios';
 
 interface Activity {
   id: string;
@@ -211,12 +210,11 @@ const BrandDashboard = () => {
     return outreachRecords.filter(record => record.campaign_id === campaignId);
   };
 
-  // Handle campaign action based on status
   const handleCampaignAction = (campaign: Campaign) => {
     switch (campaign.status.toLowerCase()) {
       case 'draft':
         // Continue campaign setup by finding influencers
-        navigate('/match_influencers', {
+        navigate('/matched-influencers', {
           state: {
             campaignId: campaign.id,
             query: campaign.campaign_name + ' ' + campaign.description,
@@ -239,21 +237,14 @@ const BrandDashboard = () => {
         break;
       case 'active':
         // View campaign details/analytics
-        const campaignOutreachActive = getCampaignOutreach(campaign.id);
-        if (campaignOutreachActive.length > 0) {
-          const outreachSummary = `Campaign has ${campaignOutreachActive.length} outreach activities:\n` +
-            campaignOutreachActive.map(o => `• ${o.influencer_username} (${o.status})`).join('\n');
-          alert(`Campaign "${campaign.campaign_name}" is active.\n\n${outreachSummary}\n\nFull analytics coming soon!`);
-        } else {
-          alert(`Campaign "${campaign.campaign_name}" is currently active. Analytics coming soon!`);
-        }
+        navigate(`/campaign/${campaign.id}`);
         break;
       case 'completed':
         // View campaign report
-        alert(`Campaign "${campaign.campaign_name}" completed. Report generation coming soon!`);
+        handleShowReport(campaign);
         break;
       default:
-        alert(`Campaign status: ${campaign.status}`);
+        navigate(`/campaign/${campaign.id}`);
     }
   };
 
@@ -628,7 +619,6 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
             // 6. Show success message with option to view contract
             const viewContract = confirm(`Contract generated successfully! Would you like to view the contract now?`);
             if (viewContract) {
-              // navigate(`/contracts/${contract.id}`);
               navigate(`/contracts`);
             }
             
@@ -697,7 +687,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
     try {
       setIsGeneratingContract(true);
       
-      const contractId = await contractIntegrationService.generateContract(outreachId);
+      await contractIntegrationService.generateContract(outreachId);
       
       // Close the modal and refresh data
       setShowAgreementsModal(false);
@@ -710,7 +700,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
       }
       
       // Show success message
-      const resp = alert(`Contract successfully generated! You can view it in the Contracts section.`);
+      alert(`Contract successfully generated! You can view it in the Contracts section.`);
     } catch (error: any) {
       alert(`Failed to generate contract: ${error.message}`);
     } finally {
@@ -779,7 +769,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
 
           <div className="flex gap-3">
             <motion.button
-              onClick={() => navigate('/match_influencers')}
+              onClick={() => navigate('/matched-influencers')}
               className="bg-white border border-gray-200 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:shadow-md transition-all duration-200 flex items-center gap-2"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -887,22 +877,20 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
               </div>
               
               {campaigns.length > 0 ? (
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {campaigns.map((campaign) => {
-                    const progress = calculateCampaignProgress(campaign);
-                    const timeRemaining = getTimeRemaining(campaign.end_date);
-                    const campaignOutreach = getCampaignOutreach(campaign.id);
-                    const totalReach = campaign.matched_creators 
-                      ? campaign.matched_creators.reduce((sum, creator) => sum + (creator.followers || 0), 0)
-                      : campaignOutreach.reduce((sum, record) => sum + (record.influencer_followers || 0), 0);
-                    const actionButton = getActionButton(campaign.status);
-                    const campaignOutreachRecords = getCampaignOutreach(campaign.id);
-                    const hasAnyCompletedDealForCampaign = campaignOutreachRecords.some(o => o.status === 'completed');
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {campaigns.map((campaign) => {
+                  const progress = calculateCampaignProgress(campaign);
+                  const timeRemaining = getTimeRemaining(campaign.end_date);
+                  const campaignOutreach = getCampaignOutreach(campaign.id);
+                  const totalReach = campaign.matched_creators 
+                    ? campaign.matched_creators.reduce((sum, creator) => sum + (creator.followers || 0), 0)
+                    : campaignOutreach.reduce((sum, record) => sum + (record.influencer_followers || 0), 0);
+                  const actionButton = getActionButton(campaign.status);
+                  const campaignOutreachRecords = getCampaignOutreach(campaign.id);
+                  const hasAnyCompletedDealForCampaign = campaignOutreachRecords.some(o => o.status === 'completed');
 
-                    return (
-                      <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer" onClick={() => {
-                        
-                      }}>
+                  return (
+                    <div key={campaign.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-all cursor-pointer" onClick={() => handleCampaignAction(campaign)}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{campaign.campaign_name}</h3>
@@ -984,16 +972,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                               View Report
                             </motion.button>
                           ) : campaign.status === 'draft' ? (
-                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium" onClick={() => {
-                              navigate(`/matched-influencers/${campaign.id}`, {
-                                state: {
-                                  campaignId: campaign.id,
-                                  query: campaign.campaign_name + ' ' + campaign.description,
-                                  campaign_description: campaign.description,
-                                  limit: 10,
-                                },
-                              });
-                            }}>
+                            <div className="bg-orange-50 text-orange-700 px-3 py-1 rounded-full text-xs font-medium">
                               Setup Required
                             </div>
                           ) : campaign.status === 'in_review' ? (
@@ -1038,7 +1017,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleShowReport(campaign);
+                                            handleShowReport(campaign, outreach.influencer_id);
                                           }}
                                           className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
                                         >
@@ -1054,14 +1033,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                             <motion.button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/matched-influencers/${campaign.id}`, {
-                                  state: {
-                                    campaignId: campaign.id,
-                                    query: campaign.campaign_name + ' ' + campaign.description,
-                                    campaign_description: campaign.description,
-                                    limit: 10,
-                                  },
-                                });
+                                handleCampaignAction(campaign);
                               }}
                               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${actionButton.color}`}
                               whileHover={{ scale: 1.02 }}
@@ -1168,7 +1140,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
                 )}
 
                 <button 
-                  onClick={() => navigate('/match_influencers')}
+                  onClick={() => navigate('/matched-influencers')}
                   className="w-full mt-6 bg-blue-50 text-blue-600 py-3 rounded-xl font-medium hover:bg-blue-100 transition-colors"
                 >
                   Discover More Influencers
@@ -1178,6 +1150,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
           </div>
         </div>
       </div>
+      
       {/* Report Modal */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
@@ -1215,6 +1188,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
           </div>
         </div>
       )}
+      
       {/* Agreements Modal */}
       {showAgreementsModal && selectedCampaign && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1290,6 +1264,7 @@ const handleShowReport = async (campaign: Campaign, influencerId?: string) => {
           </div>
         </div>
       )}
+      
       {/* Contract Preview Modal */}
       {showContractPreview && contractPreviewUrl && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
