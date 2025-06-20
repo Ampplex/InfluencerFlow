@@ -1,7 +1,11 @@
 import React, { useRef, useState } from 'react';
 import SignaturePad from 'react-signature-canvas';
+import { motion } from 'framer-motion';
 import { Contract, ContractStatus } from '../../types/contract';
 import { contractService } from '../../services/contractService';
+import { HoverBorderGradient } from '../../src/components/ui/hover-border-gradient';
+import { Alert, AlertDescription } from '../../src/components/ui/alert';
+import { X, CheckCircle, AlertCircle, RefreshCw, Loader2, PenSquare, FileSignature, Landmark, Calendar } from 'lucide-react';
 
 interface ContractSigningProps {
   contract: Contract;
@@ -57,74 +61,145 @@ export const ContractSigning: React.FC<ContractSigningProps> = ({ contract, onSi
 
   if (contract.status === ContractStatus.SIGNED) {
     return (
-      <div className="text-center p-6">
-        <div className="text-green-600 mb-4">
-          <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+      <motion.div 
+        className="text-center p-6 max-w-2xl mx-auto"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="w-20 h-20 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center mx-auto mb-6">
+          <CheckCircle className="w-12 h-12 text-green-600 dark:text-green-400" />
         </div>
-        <h3 className="text-xl font-semibold mb-2">Contract Already Signed</h3>
-        <p className="text-gray-600">This contract has already been signed and cannot be modified.</p>
-      </div>
+        <h3 className="text-2xl font-semibold mb-2 text-slate-900 dark:text-slate-100">Contract Already Signed</h3>
+        <p className="text-gray-600 dark:text-slate-400 font-mono">
+          // This agreement has been finalized and cannot be modified.
+        </p>
+      </motion.div>
     );
   }
 
   return (
-    <div className="p-6 bg-white rounded-lg shadow-lg max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6">Sign Contract</h2>
+    <motion.div 
+      className="p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-800 max-w-3xl mx-auto"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div className="flex items-center mb-8">
+        <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center mr-4">
+          <FileSignature className="w-6 h-6 text-slate-600 dark:text-slate-400" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Sign Contract</h2>
+          <p className="font-mono text-sm text-slate-500 dark:text-slate-400">
+            // Legally e-sign to finalize the agreement
+          </p>
+        </div>
+      </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error}
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">Contract Details</h3>
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <p><strong>Brand:</strong> {contract.contract_data.brand_name}</p>
-          <p><strong>Influencer:</strong> {contract.contract_data.influencer_name}</p>
-          <p><strong>Rate:</strong> ${contract.contract_data.rate}</p>
-          <p><strong>Timeline:</strong> {contract.contract_data.timeline}</p>
+      <div className="mb-8 space-y-6">
+        <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
+          contract_details() {"{"}
+        </div>
+        <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 ml-4">
+          <div className="flex items-center">
+            <Landmark className="w-5 h-5 text-slate-500 dark:text-slate-400 mr-4" />
+            <div className="flex-1">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Brand</p>
+              <p className="font-semibold text-slate-800 dark:text-slate-200">{contract.contract_data.brand_name}</p>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Influencer</p>
+              <p className="font-semibold text-slate-800 dark:text-slate-200">{contract.contract_data.influencer_name}</p>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 dark:border-slate-700 my-2"></div>
+          <div className="flex items-center">
+            <p className="text-lg font-bold text-green-600 dark:text-green-400 w-1/2">${contract.contract_data.rate}</p>
+            <div className="flex items-center text-slate-500 dark:text-slate-400">
+              <Calendar className="w-5 h-5 mr-2" />
+              <span>{contract.contract_data.timeline}</span>
+            </div>
+          </div>
+        </div>
+        <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
+          {"}"}
         </div>
       </div>
 
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">Your Signature</h3>
-        <div className="border-2 border-gray-300 rounded-lg overflow-hidden">
-          <SignaturePad
-            ref={signaturePadRef}
-            canvasProps={{
-              className: 'w-full h-64 bg-white',
-            }}
-          />
+      <div className="mb-6 space-y-6">
+        <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
+          signature_pad() {"{"}
         </div>
-        <div className="mt-2 flex justify-end">
-          <button
-            onClick={clearSignature}
-            className="text-sm text-gray-600 hover:text-gray-800"
-          >
-            Clear Signature
-          </button>
+        <div className="ml-4">
+          <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800/50">
+            <SignaturePad
+              ref={signaturePadRef}
+              canvasProps={{
+                className: 'w-full h-64',
+              }}
+            />
+          </div>
+          <div className="mt-2 flex justify-end">
+            <button
+              onClick={clearSignature}
+              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-mono flex items-center"
+            >
+              <RefreshCw className="w-3 h-3 mr-2" />
+              clear()
+            </button>
+          </div>
+        </div>
+        <div className="font-mono text-sm text-slate-600 dark:text-slate-400">
+          {"}"}
         </div>
       </div>
 
-      <div className="flex justify-end gap-4">
-        <button
+      <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+        <HoverBorderGradient
+          containerClassName="rounded-lg"
+          as="button"
+          className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono flex items-center px-6 py-3 text-sm"
           onClick={onCancel}
           disabled={loading}
-          className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
         >
-          Cancel
-        </button>
-        <button
+          <X className="w-4 h-4 mr-2" />
+          cancel()
+        </HoverBorderGradient>
+        
+        <HoverBorderGradient
+          containerClassName="rounded-lg"
+          as="button"
+          className={`font-mono flex items-center px-6 py-3 text-sm ${
+            loading 
+              ? 'bg-slate-400 dark:bg-slate-600 text-slate-200 dark:text-slate-400' 
+              : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'
+          }`}
           onClick={handleSign}
           disabled={loading}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? 'Signing...' : 'Sign Contract'}
-        </button>
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              signing...
+            </>
+          ) : (
+            <>
+              <PenSquare className="w-4 h-4 mr-2" />
+              sign_and_submit()
+            </>
+          )}
+        </HoverBorderGradient>
       </div>
-    </div>
+    </motion.div>
   );
 }; 

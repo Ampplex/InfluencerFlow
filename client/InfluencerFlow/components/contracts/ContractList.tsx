@@ -1,8 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { 
+  FileText, 
+  Clock, 
+  AlertCircle, 
+  CheckCircle, 
+  XCircle, 
+  MoreHorizontal, 
+  Plus, 
+  Eye, 
+  Edit,
+  ChevronRight,
+  Inbox
+} from 'lucide-react';
 import { Contract, ContractStatus, PaymentStatus } from '../../types/contract';
 import { contractService } from '../../services/contractService';
 import { ContractPreview } from './ContractPreview';
+import { HoverBorderGradient } from '../../src/components/ui/hover-border-gradient';
+import { Badge } from '../../src/components/ui/badge';
+import { Alert, AlertDescription } from '../../src/components/ui/alert';
 
 export const ContractList: React.FC = () => {
   const navigate = useNavigate();
@@ -33,135 +50,162 @@ export const ContractList: React.FC = () => {
     }
   };
 
-  const getStatusBadgeClass = (status: ContractStatus) => {
+  const getStatusInfo = (status: ContractStatus) => {
     switch (status) {
       case ContractStatus.DRAFT:
-        return 'bg-gray-100 text-gray-800';
+        return { icon: <Edit className="w-4 h-4" />, color: 'bg-gray-500', text: 'Draft' };
       case ContractStatus.PENDING_SIGNATURE:
-        return 'bg-yellow-100 text-yellow-800';
+        return { icon: <Clock className="w-4 h-4" />, color: 'bg-yellow-500', text: 'Pending' };
       case ContractStatus.SIGNED:
-        return 'bg-green-100 text-green-800';
+        return { icon: <CheckCircle className="w-4 h-4" />, color: 'bg-green-500', text: 'Signed' };
       case ContractStatus.REJECTED:
-        return 'bg-red-100 text-red-800';
+        return { icon: <XCircle className="w-4 h-4" />, color: 'bg-red-500', text: 'Rejected' };
       default:
-        return 'bg-gray-100 text-gray-800';
+        return { icon: <MoreHorizontal className="w-4 h-4" />, color: 'bg-gray-500', text: 'Unknown' };
     }
   };
 
-  const getPaymentStatusBadgeClass = (status?: PaymentStatus) => {
+  const getPaymentStatusInfo = (status?: PaymentStatus) => {
     switch (status) {
       case PaymentStatus.PENDING:
-        return 'bg-gray-100 text-gray-800';
+        return { text: 'Pending', className: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' };
       case PaymentStatus.INITIATED:
-        return 'bg-blue-100 text-blue-800';
+        return { text: 'Initiated', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' };
       case PaymentStatus.COMPLETED:
-        return 'bg-green-100 text-green-800';
+        return { text: 'Paid', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
       case PaymentStatus.FAILED:
-        return 'bg-red-100 text-red-800';
+        return { text: 'Failed', className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' };
       default:
-        return 'bg-gray-100 text-gray-800';
+        return { text: 'N/A', className: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' };
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-6 animate-pulse">
+          <FileText className="w-8 h-8 text-slate-600 dark:text-slate-400" />
+        </div>
+        <h3 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+          Loading Contracts...
+        </h3>
+        <p className="text-slate-600 dark:text-slate-400 font-mono text-sm text-center max-w-md">
+          // Fetching your agreements from the blockchain of paperwork
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-        {error}
+      <div className="flex justify-center py-16">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error}
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Contracts</h2>
-        <button
+    <motion.div 
+      className="max-w-7xl mx-auto"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-100 mb-2 tracking-tight">
+            Contracts
+          </h1>
+          <p className="font-mono text-sm text-slate-600 dark:text-slate-400">
+            // Manage all your brand and influencer agreements
+          </p>
+        </div>
+        <HoverBorderGradient
+          containerClassName="rounded-lg"
+          as="button"
+          className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono flex items-center px-4 py-2 text-sm font-medium"
           onClick={() => navigate('/contracts/create')}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
-          Create Contract
-        </button>
+          <Plus className="w-4 h-4 mr-2" />
+          create_contract()
+        </HoverBorderGradient>
       </div>
 
       {contracts.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Contracts Found</h3>
-          <p className="text-gray-600">Start by creating a new contract.</p>
+        <div className="text-center py-24 bg-white dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+          <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Inbox className="w-10 h-10 text-slate-500 dark:text-slate-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-slate-100 mb-2">No Contracts Found</h3>
+          <p className="text-gray-600 dark:text-slate-400 font-mono text-sm">
+            // Start by creating a new contract for a campaign
+          </p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contract Details
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Payment
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {contracts.map((contract) => (
-                <tr key={contract.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">
-                      {contract.contract_data.brand_name} ↔ {contract.contract_data.influencer_name}
+        <div className="bg-white dark:bg-slate-800/50 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+            {contracts.map((contract) => {
+              const statusInfo = getStatusInfo(contract.status);
+              const paymentStatusInfo = getPaymentStatusInfo(contract.payment_status);
+              return (
+                <li key={contract.id} className="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200">
+                  <div className="flex items-center p-4 sm:p-6">
+                    <div className="flex-shrink-0 mr-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${statusInfo.color}`}>
+                        {statusInfo.icon}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-500">
-                      ${contract.contract_data.rate} • {contract.contract_data.timeline}
+                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 items-center">
+                      <div className="sm:col-span-2">
+                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                          {contract.contract_data.brand_name} ↔ {contract.contract_data.influencer_name}
+                        </div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400 font-mono">
+                          ${contract.contract_data.rate} • {contract.contract_data.timeline}
+                        </div>
+                      </div>
+                      <div className="hidden sm:block">
+                        <Badge variant="outline" className={paymentStatusInfo.className}>
+                          {paymentStatusInfo.text}
+                        </Badge>
+                      </div>
+                      <div className="hidden sm:block text-sm text-slate-500 dark:text-slate-400 font-mono">
+                        {new Date(contract.created_at).toLocaleDateString()}
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(contract.status)}`}>
-                      {contract.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusBadgeClass(contract.payment_status)}`}>
-                      {contract.payment_status || 'N/A'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(contract.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm font-medium">
-                    <button
-                      onClick={() => setSelectedContract(contract)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      View
-                    </button>
-                    {contract.status === ContractStatus.PENDING_SIGNATURE && (
-                      <button
-                        onClick={() => navigate(`/contracts/sign/${contract.id}`)}
-                        className="text-green-600 hover:text-green-900"
+                    <div className="flex items-center gap-2 ml-4">
+                      <HoverBorderGradient
+                        containerClassName="rounded-lg"
+                        as="button"
+                        className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono flex items-center px-3 py-2 text-xs"
+                        onClick={() => setSelectedContract(contract)}
                       >
-                        Sign
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        <Eye className="w-3 h-3 mr-1" />
+                        View
+                      </HoverBorderGradient>
+                      {contract.status === ContractStatus.PENDING_SIGNATURE && (
+                        <HoverBorderGradient
+                          containerClassName="rounded-lg"
+                          as="button"
+                          className="bg-green-600 text-white font-mono flex items-center px-3 py-2 text-xs"
+                          onClick={() => navigate(`/contracts/sign/${contract.id}`)}
+                        >
+                          <Edit className="w-3 h-3 mr-1" />
+                          Sign
+                        </HoverBorderGradient>
+                      )}
+                      <ChevronRight className="w-5 h-5 text-slate-400" />
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
@@ -171,6 +215,6 @@ export const ContractList: React.FC = () => {
           onClose={() => setSelectedContract(null)}
         />
       )}
-    </div>
+    </motion.div>
   );
 }; 
